@@ -1296,6 +1296,7 @@ service cloud.firestore {
 
   // --- SUBVIEW 4: PARAMETER VIEW ---
   const ParameterView = () => {
+    const [activeSubTab, setActiveSubTab] = useState('limit'); // 'limit' atau 'reset'
     const [localParams, setLocalParams] = useState(params);
     const [saved, setSaved] = useState(false);
 
@@ -1414,59 +1415,96 @@ service cloud.firestore {
 
     return (
       <div className="max-w-lg mx-auto space-y-6 text-left">
-        {/* Card 1: Form Parameter */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-          <h2 className="text-lg font-semibold text-slate-800 mb-6 flex items-center"><Settings size={20} className="mr-2 text-blue-600" /> Pengaturan Parameter Lembur</h2>
+        {/* Navigation Subtabs */}
+        <div className="flex bg-white rounded-xl p-1 shadow-xs border border-slate-200 gap-1 no-print">
+          <button
+            type="button"
+            onClick={() => setActiveTab(activeTab)} // Force re-render if needed
+            className="hidden"
+          ></button>
           
-          {saved && <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-lg text-sm flex items-center"><Check size={16} className="mr-2" /> Parameter berhasil disimpan permanen.</div>}
-          
-          <form onSubmit={handleSave} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Maksimal Lembur per Hari (Jam)</label>
-              <input 
-                type="number" 
-                step="0.5" 
-                required 
-                value={localParams.maxPerDay === '' || Number.isNaN(localParams.maxPerDay) ? '' : localParams.maxPerDay} 
-                onChange={e => setLocalParams({...localParams, maxPerDay: e.target.value === '' ? '' : parseFloat(e.target.value)})} 
-                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white text-sm" 
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Maksimal Lembur per Bulan (Jam)</label>
-              <input 
-                type="number" 
-                step="1" 
-                required 
-                value={localParams.maxPerMonth === '' || Number.isNaN(localParams.maxPerMonth) ? '' : localParams.maxPerMonth} 
-                onChange={e => setLocalParams({...localParams, maxPerMonth: e.target.value === '' ? '' : parseFloat(e.target.value)})} 
-                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white text-sm" 
-              />
-            </div>
-            <div className="pt-4">
-              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors cursor-pointer text-sm shadow-sm">
-                Simpan Parameter
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* Card 2: Submenu Reset Data Approval */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 border-t-4 border-t-red-500">
-          <h2 className="text-lg font-semibold text-slate-800 mb-3 flex items-center"><AlertTriangle size={20} className="mr-2 text-red-500" /> Reset Data Approval</h2>
-          <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-            Gunakan submenu ini untuk menghapus seluruh input data lembur yang dikirimkan oleh Maker (baik berstatus Pending, Registered, Approved, maupun Reject). Tindakan ini membutuhkan verifikasi keamanan tingkat tinggi.
-          </p>
-          <button 
-            type="button" 
-            onClick={handleInitResetFlow}
-            disabled={resetLoading}
-            className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 p-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('limit')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              activeSubTab === 'limit'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
           >
-            {resetLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-            Mulai Reset Data Approval
+            <Settings size={15} />
+            <span>Limit Lembur</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('reset')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              activeSubTab === 'reset'
+                ? 'bg-red-50 text-red-600 border border-red-100 shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <AlertTriangle size={15} />
+            <span>Reset Data Approval</span>
           </button>
         </div>
+
+        {activeSubTab === 'limit' ? (
+          /* Card 1: Form Parameter */
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 animate-in fade-in duration-200">
+            <h2 className="text-lg font-semibold text-slate-800 mb-6 flex items-center"><Settings size={20} className="mr-2 text-blue-600" /> Pengaturan Parameter Lembur</h2>
+            
+            {saved && <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-lg text-sm flex items-center"><Check size={16} className="mr-2" /> Parameter berhasil disimpan permanen.</div>}
+            
+            <form onSubmit={handleSave} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Maksimal Lembur per Hari (Jam)</label>
+                <input 
+                  type="number" 
+                  step="0.5" 
+                  required 
+                  value={localParams.maxPerDay === '' || Number.isNaN(localParams.maxPerDay) ? '' : localParams.maxPerDay} 
+                  onChange={e => setLocalParams({...localParams, maxPerDay: e.target.value === '' ? '' : parseFloat(e.target.value)})} 
+                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white text-sm" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Maksimal Lembur per Bulan (Jam)</label>
+                <input 
+                  type="number" 
+                  step="1" 
+                  required 
+                  value={localParams.maxPerMonth === '' || Number.isNaN(localParams.maxPerMonth) ? '' : localParams.maxPerMonth} 
+                  onChange={e => setLocalParams({...localParams, maxPerMonth: e.target.value === '' ? '' : parseFloat(e.target.value)})} 
+                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white text-sm" 
+                />
+              </div>
+              <div className="pt-4">
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors cursor-pointer text-sm shadow-sm">
+                  Simpan Parameter
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
+          /* Card 2: Submenu Reset Data Approval */
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 border-t-4 border-t-red-500 animate-in fade-in duration-200">
+            <h2 className="text-lg font-semibold text-slate-800 mb-3 flex items-center"><AlertTriangle size={20} className="mr-2 text-red-500" /> Reset Data Approval</h2>
+            <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+              Gunakan submenu ini untuk menghapus seluruh input data lembur yang dikirimkan oleh Maker (baik berstatus Pending, Registered, Approved, maupun Reject). Tindakan ini membutuhkan verifikasi keamanan tingkat tinggi.
+            </p>
+            <button 
+              type="button" 
+              onClick={handleInitResetFlow}
+              disabled={resetLoading}
+              className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 p-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {resetLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              Mulai Reset Data Approval
+            </button>
+          </div>
+        )}
 
         {/* MODAL DIALOG RESET DATA & VERIFIKASI OTP */}
         {showResetModal && (
