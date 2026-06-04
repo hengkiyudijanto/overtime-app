@@ -2528,7 +2528,7 @@ service cloud.firestore {
           
           <div className="flex items-center gap-3 w-full md:w-auto justify-end">
             <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 flex flex-row items-center">
-              <span className="text-slate-400 font-normal mr-2 hidden sm:inline">User Aktif:</span>
+              <span className="text-slate-400 font-normal mr-2 hidden sm:inline"></span>
               <span className="font-semibold text-slate-800 truncate max-w-[150px]">{currentUser?.name}</span>
               <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full ml-2">
                 {(currentUser?.role || '').toUpperCase()}
