@@ -324,7 +324,7 @@ export default function App() {
       formattedPhone = '62' + formattedPhone.slice(1);
     }
 
-    const templateMsg = `Kode OTP Lupa Password O-Time Mamuju Anda adalah: ${otp}. Harap jangan bagikan kode ini kepada siapa pun.`;
+    const templateMsg = `Kode OTP Lupa Password Overtime 244 Mamuju Anda adalah: ${otp}. Harap jangan bagikan kode ini kepada siapa pun.`;
     const waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(templateMsg)}`;
 
     setWhatsappToast({
@@ -558,9 +558,14 @@ service cloud.firestore {
         <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-100">
           <div className="text-center mb-8">
             <div className="inline-flex p-3 bg-blue-50 rounded-full mb-4">
-              <img src="Bank_BTN_logo.png" alt="Bank BTN Logo" className="h-12 w-auto object-contain" onError={(e) => { e.target.src = BTN_LOGO_FALLBACK; }} />
+              <img 
+                src="Bank_BTN_logo.png" 
+                alt="Bank BTN Logo" 
+                className="h-12 w-auto object-contain" 
+                onError={(e) => { e.target.src = BTN_LOGO_FALLBACK; }} 
+              />
             </div>
-            <h1 className="text-2xl font-bold text-slate-800">O-Time</h1>
+            <h1 className="text-2xl font-bold text-slate-800">Overtime 244</h1>
             <p className="text-sm text-slate-500 mt-1">Kantor Cabang Mamuju</p>
           </div>
 
@@ -2211,7 +2216,7 @@ service cloud.firestore {
           />
           <div className="text-left">
             <h1 className="text-xl font-bold text-white flex items-center">
-              O-Time
+              Overtime 244
             </h1>
             <p className="text-xs text-slate-400">KC Mamuju</p>
           </div>
@@ -2259,7 +2264,7 @@ service cloud.firestore {
                 className="h-6 w-auto object-contain" 
                 onError={(e) => { e.target.src = BTN_LOGO_FALLBACK; }} 
               />
-              <span>O-Time</span>
+              <span>Overtime 244</span>
             </h1>
             <h2 className="hidden md:block text-lg font-semibold text-slate-800 capitalize">
               {navItems.find(i => i.id === activeTab)?.label || 'Dashboard'}
