@@ -30,27 +30,34 @@ import {
   SlidersHorizontal,
   Calendar,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  DownloadCloud,
+  Smartphone
 } from 'lucide-react';
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 
-// --- SAFE GLOBAL PROCESS INJECTION (Mencegah ReferenceError & Peringatan ES2015 Target) ---
-if (typeof globalThis !== 'undefined' && typeof globalThis.process === 'undefined') {
-  globalThis.process = { env: {} };
-}
+// --- SAFE ENVIRONMENT VARIABLE GETTER ---
+const getEnv = (key) => {
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env[key]) {
+      return process.env[key];
+    }
+  } catch (e) {}
+  return "";
+};
 
 // --- INITIALIZE FIREBASE SYSTEM (Production Environment Config) ---
-// Membaca dari Vercel Environment Variables secara aman menggunakan format Vite standar
+// Membaca dari Vercel Environment Variables secara aman tanpa menggunakan import.meta
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || (typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_API_KEY : ""),
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || (typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_AUTH_DOMAIN : ""),
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || (typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_PROJECT_ID : ""),
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || (typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_STORAGE_BUCKET : ""),
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || (typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_MESSAGING_SENDER_ID : ""),
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || (typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_APP_ID : "")
+  apiKey: getEnv('VITE_FIREBASE_API_KEY') || "AIzaSyCMUqxl3MhFp-TneyOBFohDYmi_XBUXRfs",
+  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN') || "overtime-app-22175.firebaseapp.com",
+  projectId: getEnv('VITE_FIREBASE_PROJECT_ID') || "overtime-app-22175",
+  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET') || "overtime-app-22175.firebasestorage.app",
+  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID') || "661655668561",
+  appId: getEnv('VITE_FIREBASE_APP_ID') || "1:661655668561:web:4e9983976b624de10cb570"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -58,7 +65,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // Sanitasi App ID untuk Firestore
-const rawAppId = import.meta.env.VITE_APP_ID || (typeof process !== 'undefined' && process.env ? process.env.VITE_APP_ID : "btn-mamuju-production");
+const rawAppId = getEnv('VITE_APP_ID') || "btn-mamuju-production";
 const appId = String(rawAppId).replace(/\//g, '_');
 
 // --- EXPONENTIAL BACKOFF RETRY HELPER FOR FIRESTORE ---
@@ -115,6 +122,11 @@ export default function App() {
   const [isPrintMode, setIsPrintMode] = useState(false);
   const [generating, setGenerating] = useState(false);
 
+  // --- STATE PWA (PROGRESSIVE WEB APP) ---
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isIosPromptVisible, setIsIosPromptVisible] = useState(false);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+
   const BTN_LOGO_FALLBACK = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 50'%3E%3Ctext x='5' y='42' font-family='system-ui, -apple-system, sans-serif' font-weight='950' font-size='45' fill='%23006cb7' letter-spacing='-3'%3Ebtn%3C/text%3E%3Cpolygon points='68,14 92,6 88,2 64,10' fill='%23e21a22' /%3E%3C/svg%3E";
 
   const getEmployeeName = (nip) => {
@@ -130,6 +142,54 @@ export default function App() {
       document.body.appendChild(script);
     }
   }, []);
+
+  // --- EVENT LISTENER PWA INSTALLATION ---
+  useEffect(() => {
+    // Mengecek apakah aplikasi sudah dijalankan dalam mode standalone (sudah di-install)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone || document.referrer.includes('android-app://');
+    setIsAppInstalled(isStandalone);
+
+    // Menangkap event instalasi Android (Chrome/Edge)
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Deteksi perangkat iOS (Safari tidak mendukung beforeinstallprompt secara otomatis)
+    const isIos = () => {
+      const userAgent = window.navigator.userAgent.toLowerCase();
+      return /iphone|ipad|ipod/.test(userAgent);
+    };
+
+    if (isIos() && !isStandalone) {
+      setIsIosPromptVisible(true);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallPwa = async () => {
+    if (deferredPrompt) {
+      // Tampilkan prompt instalasi native Android
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        setIsAppInstalled(true);
+      }
+    } else if (isIosPromptVisible) {
+      // Tampilkan instruksi manual untuk pengguna iOS
+      setDialog({
+        type: 'alert',
+        title: 'Install di iPhone / iPad',
+        message: 'Untuk memasang aplikasi ini: Ketuk ikon "Bagikan" (Share) di bagian bawah browser Safari Anda (ikon kotak dengan panah ke atas), lalu gulir ke bawah dan ketuk "Tambah ke Layar Utama" (Add to Home Screen).'
+      });
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -425,6 +485,60 @@ export default function App() {
     return phone.slice(0, 4) + '*****' + phone.slice(-3);
   };
 
+
+  // --- TROUBLESHOOTING UI ---
+  if (authOrFirestoreError) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-slate-100 font-sans" style={{ backgroundColor: '#0b1329' }}>
+        <div className="bg-white text-slate-800 rounded-2xl shadow-2xl p-8 max-w-lg w-full border border-slate-200">
+          <div className="text-center mb-6">
+            <div className="inline-flex p-3 bg-red-50 rounded-full mb-3 text-red-600">
+              <AlertTriangle size={36} className="animate-bounce" />
+            </div>
+            <h1 className="text-xl font-bold text-slate-800">Koneksi Database Terhambat</h1>
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+              Aplikasi mendeteksi adanya kendala hak akses (*Permission Denied*) atau kegagalan autentikasi dengan Firebase.
+            </p>
+          </div>
+
+          <div className="space-y-4 text-left">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px]">1</span>
+                Aktifkan Anonymous Sign-In
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed pl-6">
+                Buka <strong>Firebase Console</strong> &gt; <strong>Authentication</strong> &gt; tab <strong>Sign-in method</strong> &gt; klik <strong>Add new provider</strong> &gt; pilih <strong>Anonymous</strong> &gt; aktifkan/enable &gt; klik <strong>Save</strong>.
+              </p>
+            </div>
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px]">2</span>
+                Perbarui Aturan Firestore (Rules)
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed pl-6 mb-2">
+                Buka <strong>Firestore Database</strong> &gt; tab <strong>Rules</strong> &gt; ubah aturan menjadi seperti di bawah ini agar aman dan dapat diakses:
+              </p>
+              <pre className="bg-slate-900 text-slate-200 p-2.5 rounded-lg text-[10px] font-mono overflow-x-auto pl-6">
+{`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}`}
+              </pre>
+            </div>
+          </div>
+          <button onClick={() => window.location.reload()} className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold text-sm transition-all shadow-md mt-6 flex items-center justify-center gap-2">
+            <Database size={16} /> Coba Hubungkan Kembali
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
@@ -517,8 +631,9 @@ export default function App() {
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4" style={{ backgroundColor: '#0b1329' }}>
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-100">
-          <div className="text-center mb-8">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-100 relative">
+          
+          <div className="text-center mb-8 mt-4">
             <div className="inline-flex p-3 bg-blue-50 rounded-full mb-4">
               <img 
                 src="Bank_BTN_logo.png" 
@@ -598,6 +713,19 @@ export default function App() {
               Masuk ke Aplikasi
             </button>
           </form>
+
+          {/* TOMBOL INSTALASI PWA EKSKLUSIF */}
+          {!isAppInstalled && (deferredPrompt || isIosPromptVisible) && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <button 
+                onClick={handleInstallPwa}
+                className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white p-3 rounded-xl font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer animate-in fade-in"
+              >
+                {isIosPromptVisible ? <Smartphone size={18} /> : <DownloadCloud size={18} />}
+                {isIosPromptVisible ? "Cara Install di Layar Utama" : "Install Aplikasi (PWA)"}
+              </button>
+            </div>
+          )}
 
           <div className="mt-6 text-center border-t border-slate-100 pt-5">
             <p className="text-[11px] text-slate-400 leading-relaxed">
@@ -840,7 +968,7 @@ export default function App() {
     };
 
     const selectedMonth = formData.date ? formData.date.substring(0, 7) : new Date(2026, 5, 2).toISOString().substring(0, 7);
-    const currentMonthRequests = requests.filter(r => r.nip === currentUser?.nip && r.date.startsWith(selectedMonth));
+    const currentMonthRequests = requests.filter(r => r.nip === currentUser.nip && r.date.startsWith(selectedMonth));
     
     const processedHours = currentMonthRequests
       .filter(r => r.status === 'Approved' || r.status === 'Registered')
@@ -866,7 +994,7 @@ export default function App() {
 
       // Validasi duplikasi tanggal aktif
       const isDuplicateDate = requests.some(r => 
-        r.nip === currentUser?.nip && 
+        r.nip === currentUser.nip && 
         r.date === formData.date && 
         r.status !== 'Reject' && 
         r.status !== 'Rejected'
@@ -892,14 +1020,14 @@ export default function App() {
       const id = Date.now().toString();
       const newRequest = {
         id,
-        nip: currentUser?.nip || '',
+        nip: currentUser.nip,
         date: formData.date,
         startTime: formData.startTime,
         endTime: formData.endTime,
         duration: duration,
         reason: formData.reason,
         status: 'Pending',
-        atasan: currentUser?.atasan || ''
+        atasan: currentUser.atasan || ''
       };
 
       try {
@@ -951,7 +1079,7 @@ export default function App() {
       };
     };
 
-    const myRequests = requests.filter(r => r.nip === currentUser?.nip).sort((a,b) => b.id - a.id);
+    const myRequests = requests.filter(r => r.nip === currentUser.nip).sort((a,b) => b.id - a.id);
     
     const filteredMyRequests = useMemo(() => {
       if (myStatusFilter === 'all') return myRequests;
@@ -1219,7 +1347,7 @@ export default function App() {
   // --- SUBVIEW 2: APPROVAL VIEW ---
   const ApprovalView = () => {
     const activeRequests = requests.filter(r => {
-      const isMyBawahan = r.atasan === currentUser?.nip || currentUser?.role === 'admin' || currentUser?.role === 'manager';
+      const isMyBawahan = r.atasan === currentUser.nip || currentUser.role === 'admin' || currentUser.role === 'manager';
       if (!isMyBawahan) return false;
 
       const isPhase1 = r.status === 'Pending';
@@ -1804,12 +1932,6 @@ export default function App() {
         <div className="flex bg-white rounded-xl p-1 shadow-xs border border-slate-200 gap-1 no-print">
           <button
             type="button"
-            onClick={() => setActiveTab(activeTab)} // Force re-render if needed
-            className="hidden"
-          ></button>
-          
-          <button
-            type="button"
             onClick={() => setActiveSubTab('limit')}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
               activeSubTab === 'limit'
@@ -2005,35 +2127,35 @@ export default function App() {
 
     const accessibleAtasan = useMemo(() => {
       const allAtasan = employees.filter(e => e.role === 'approval' || e.role === 'manager' || e.role === 'admin');
-      if (currentUser?.role === 'admin') {
+      if (currentUser.role === 'admin') {
         return allAtasan;
       }
-      if (currentUser?.role === 'manager') {
-        return allAtasan.filter(e => e.atasan === currentUser?.nip);
+      if (currentUser.role === 'manager') {
+        return allAtasan.filter(e => e.atasan === currentUser.nip);
       }
       return [];
     }, [employees, currentUser]);
 
     const accessiblePegawai = useMemo(() => {
-      if (currentUser?.role === 'admin') {
+      if (currentUser.role === 'admin') {
         if (selectedAtasan === 'all') {
           return employees;
         } else {
           return employees.filter(e => e.atasan === selectedAtasan);
         }
       }
-      if (currentUser?.role === 'manager') {
+      if (currentUser.role === 'manager') {
         if (selectedAtasan === 'all') {
           const downlinerAtasanNips = accessibleAtasan.map(a => a.nip);
-          return employees.filter(e => e.atasan === currentUser?.nip || downlinerAtasanNips.includes(e.atasan));
+          return employees.filter(e => e.atasan === currentUser.nip || downlinerAtasanNips.includes(e.atasan));
         } else {
           return employees.filter(e => e.atasan === selectedAtasan);
         }
       }
-      if (currentUser?.role === 'approval') {
-        return employees.filter(e => e.nip === currentUser?.nip || e.atasan === currentUser?.nip);
+      if (currentUser.role === 'approval') {
+        return employees.filter(e => e.nip === currentUser.nip || e.atasan === currentUser.nip);
       }
-      return currentUser ? [currentUser] : [];
+      return [currentUser];
     }, [employees, currentUser, selectedAtasan, accessibleAtasan]);
 
     useEffect(() => {
@@ -2098,6 +2220,7 @@ export default function App() {
       }
     };
 
+    // --- NEW: EXPORT TO EXCEL SYSTEM ---
     const handleExportExcel = () => {
       if (!window.XLSX) {
         setDialog({
@@ -2201,7 +2324,7 @@ export default function App() {
               className="p-2 border border-slate-300 rounded-lg text-sm bg-white" 
             />
 
-            {(currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
+            {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
               <select 
                 value={selectedAtasan} 
                 onChange={e => {
@@ -2217,7 +2340,7 @@ export default function App() {
               </select>
             )}
 
-            {(currentUser?.role === 'admin' || currentUser?.role === 'manager' || currentUser?.role === 'approval') && (
+            {(currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'approval') && (
               <select 
                 value={selectedPegawai} 
                 onChange={e => setSelectedPegawai(e.target.value)} 
@@ -2438,35 +2561,35 @@ export default function App() {
 
     const accessibleAtasan = useMemo(() => {
       const allAtasan = employees.filter(e => e.role === 'approval' || e.role === 'manager' || e.role === 'admin');
-      if (currentUser?.role === 'admin') {
+      if (currentUser.role === 'admin') {
         return allAtasan;
       }
-      if (currentUser?.role === 'manager') {
-        return allAtasan.filter(e => e.atasan === currentUser?.nip);
+      if (currentUser.role === 'manager') {
+        return allAtasan.filter(e => e.atasan === currentUser.nip);
       }
       return [];
     }, [employees, currentUser]);
 
     const accessiblePegawai = useMemo(() => {
-      if (currentUser?.role === 'admin') {
+      if (currentUser.role === 'admin') {
         if (selectedAtasan === 'all') {
           return employees;
         } else {
           return employees.filter(e => e.atasan === selectedAtasan);
         }
       }
-      if (currentUser?.role === 'manager') {
+      if (currentUser.role === 'manager') {
         if (selectedAtasan === 'all') {
           const downlinerAtasanNips = accessibleAtasan.map(a => a.nip);
-          return employees.filter(e => e.atasan === currentUser?.nip || downlinerAtasanNips.includes(e.atasan));
+          return employees.filter(e => e.atasan === currentUser.nip || downlinerAtasanNips.includes(e.atasan));
         } else {
           return employees.filter(e => e.atasan === selectedAtasan);
         }
       }
-      if (currentUser?.role === 'approval') {
-        return employees.filter(e => e.nip === currentUser?.nip || e.atasan === currentUser?.nip);
+      if (currentUser.role === 'approval') {
+        return employees.filter(e => e.nip === currentUser.nip || e.atasan === currentUser.nip);
       }
-      return currentUser ? [currentUser] : [];
+      return [currentUser];
     }, [employees, currentUser, selectedAtasan, accessibleAtasan]);
 
     useEffect(() => {
@@ -2542,7 +2665,7 @@ export default function App() {
           <div className="flex flex-wrap gap-3">
             <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm bg-white" />
             
-            {(currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
+            {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
               <select 
                 value={selectedAtasan} 
                 onChange={e => {
@@ -2558,7 +2681,7 @@ export default function App() {
               </select>
             )}
 
-            {(currentUser?.role === 'admin' || currentUser?.role === 'manager' || currentUser?.role === 'approval') && (
+            {(currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'approval') && (
               <select 
                 value={selectedPegawai} 
                 onChange={e => setSelectedPegawai(e.target.value)} 
@@ -2901,23 +3024,20 @@ export default function App() {
           </div>
         </div>
         <nav className="p-4 space-y-1 flex-1 overflow-y-auto">
-          {navItems.filter(item => item.roles.includes(currentUser?.role)).map(item => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center p-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                  activeTab === item.id 
-                    ? 'bg-blue-600 text-white shadow-md' 
-                    : 'hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                <Icon size={18} className="mr-3" />
-                {item.label}
-              </button>
-            );
-          })}
+          {navItems.filter(item => item.roles.includes(currentUser.role)).map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center p-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                activeTab === item.id 
+                  ? 'bg-blue-600 text-white shadow-md' 
+                  : 'hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <item.icon size={18} className="mr-3" />
+              {item.label}
+            </button>
+          ))}
         </nav>
         <div className="p-4 border-t border-slate-800">
           <button 
@@ -2936,38 +3056,24 @@ export default function App() {
         {/* TOP BAR */}
         <header className="bg-white border-b border-slate-200 p-4 px-4 md:px-6 flex flex-col sm:flex-row justify-between items-center shadow-sm z-10 sticky top-0 gap-3 no-print">
           <div className="flex justify-between w-full md:w-auto items-center">
-            {/* Tampilan Mobile Header (Logo + Title + Subtitle) */}
             <div className="md:hidden flex items-center gap-2.5">
               <img 
                 src="Bank_BTN_logo.png" 
                 alt="BTN Logo" 
-                className="h-8 w-auto object-contain" 
+                className="h-7 w-auto object-contain" 
                 onError={(e) => { e.target.src = BTN_LOGO_FALLBACK; }} 
               />
-              <div className="text-left flex flex-col justify-center">
+              <div className="flex flex-col text-left">
                 <h1 className="text-base font-bold text-slate-800 leading-none">Overtime 244</h1>
-                <p className="text-[10px] font-semibold text-slate-500 mt-1 uppercase tracking-wider">KC Mamuju</p>
+                <p className="text-[10px] text-slate-500 mt-0.5 font-medium uppercase tracking-wide">KC Mamuju</p>
               </div>
             </div>
-            {/* Tampilan Desktop Header (Nama Tab Aktif) */}
             <h2 className="hidden md:block text-lg font-semibold text-slate-800 capitalize">
               {navItems.find(i => i.id === activeTab)?.label || 'Dashboard'}
             </h2>
           </div>
           
           <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-            {/* TOMBOL PWA DI HEADER UNTUK DESKTOP / DEVICE LEBAR */}
-            {!isAppInstalled && (deferredPrompt || isIosPromptVisible) && (
-              <button 
-                onClick={handleInstallPwa}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer mr-2"
-                title="Install Aplikasi ini di Perangkat Anda"
-              >
-                {isIosPromptVisible ? <Smartphone size={14} /> : <DownloadCloud size={14} />}
-                Install PWA
-              </button>
-            )}
-
             <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 flex flex-row items-center gap-1.5">
               <span className="font-bold text-slate-800">{currentUser?.name}</span>
               {currentUser?.position && (
@@ -2993,25 +3099,22 @@ export default function App() {
 
       {/* BOTTOM NAVIGATION (Mobile Only) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-between items-center px-1 py-2 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] overflow-x-auto no-print">
-        {navItems.filter(item => item.roles.includes(currentUser?.role)).map(item => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`flex flex-col items-center justify-center p-2 min-w-[60px] flex-1 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
-                activeTab === item.id 
-                  ? 'text-blue-600' 
-                  : 'text-slate-500'
-              }`}
-            >
-              <Icon size={22} className={`mb-1 ${activeTab === item.id ? 'opacity-100' : 'opacity-70'}`} />
-              <span className="truncate w-full text-center leading-tight">
-                {item.label.split(' ')[0]}
-              </span>
-            </button>
-          );
-        })}
+        {navItems.filter(item => item.roles.includes(currentUser.role)).map(item => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            className={`flex flex-col items-center justify-center p-2 min-w-[60px] flex-1 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
+              activeTab === item.id 
+                ? 'text-blue-600' 
+                : 'text-slate-500'
+            }`}
+          >
+            <item.icon size={22} className={`mb-1 ${activeTab === item.id ? 'opacity-100' : 'opacity-70'}`} />
+            <span className="truncate w-full text-center leading-tight">
+              {item.label.split(' ')[0]}
+            </span>
+          </button>
+        ))}
         <button
           onClick={handleLogout}
           className="flex flex-col items-center justify-center p-2 min-w-[60px] flex-1 rounded-lg text-[10px] font-medium text-red-500 cursor-pointer"
