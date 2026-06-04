@@ -1299,6 +1299,13 @@ service cloud.firestore {
     const [localParams, setLocalParams] = useState(params);
     const [saved, setSaved] = useState(false);
 
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [resetStep, setResetStep] = useState(1); // 1: Konfirmasi Awal, 2: Verifikasi OTP
+    const [resetOtp, setResetOtp] = useState('');
+    const [enteredResetOtp, setEnteredResetOtp] = useState('');
+    const [resetOtpError, setResetOtpError] = useState('');
+    const [resetLoading, setResetLoading] = useState(false);
+
     const handleSave = async (e) => {
       e.preventDefault();
       const finalParams = {
@@ -1315,41 +1322,251 @@ service cloud.firestore {
       }
     };
 
+    const handleInitResetFlow = () => {
+      setShowResetModal(true);
+      setResetStep(1);
+      setEnteredResetOtp('');
+      setResetOtpError('');
+    };
+
+    const handleSendResetOtp = () => {
+      // Menghasilkan 6 angka acak keamanan secara acak
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      setResetOtp(otp);
+
+      // Mencari no handphone milik admin
+      const adminEmp = employees.find(e => e.role === 'admin' && e.noHandphone && e.noHandphone !== '-');
+      const adminPhone = adminEmp ? adminEmp.noHandphone : "081122334455"; // Fallback nomor simulasi
+
+      let formattedPhone = adminPhone.replace(/[^0-9]/g, '');
+      if (formattedPhone.startsWith('0')) {
+        formattedPhone = '62' + formattedPhone.slice(1);
+      }
+
+      const templateMsg = `KEAMANAN TINGGI OVERTIME 244 MAMUJU! Kode OTP untuk melakukan RESET seluruh data approval/lembur adalah: ${otp}. Harap jangan berikan kode keamanan ini kepada siapa pun!`;
+      const waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(templateMsg)}`;
+
+      // Menampilkan notifikasi simulasi WhatsApp di pojok kanan atas
+      setWhatsappToast({
+        show: true,
+        message: `Pesan keamanan dikirim ke WhatsApp Admin (${adminPhone}): "${templateMsg}"`,
+        otp: otp
+      });
+
+      // Membuka tab WhatsApp Web
+      window.open(waUrl, '_blank');
+      setResetStep(2);
+    };
+
+    const handleVerifyResetOtp = (e) => {
+      e.preventDefault();
+      setResetOtpError('');
+
+      if (enteredResetOtp === resetOtp) {
+        setShowResetModal(false);
+        setResetStep(1);
+        setEnteredResetOtp('');
+
+        setDialog({
+          type: 'confirm',
+          title: 'Konfirmasi Penghapusan Final',
+          message: `OTP Berhasil Terverifikasi! Apakah Anda benar-benar yakin ingin menghapus seluruh data pengajuan lembur (${requests.length} data) dari database cloud? Tindakan ini bersifat permanen dan tidak dapat dibatalkan.`,
+          isDanger: true,
+          onConfirm: async () => {
+            setResetLoading(true);
+            try {
+              const batch = writeBatch(db);
+              let count = 0;
+
+              for (let i = 0; i < requests.length; i++) {
+                const req = requests[i];
+                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'requests', req.id);
+                batch.delete(ref);
+                count++;
+
+                if (count === 400) {
+                  await runWithRetry(() => batch.commit());
+                  count = 0;
+                }
+              }
+
+              if (count > 0) {
+                await runWithRetry(() => batch.commit());
+              }
+
+              setDialog({
+                type: 'alert',
+                title: 'Data Berhasil Direset',
+                message: 'Semua data pengajuan lembur (approval) telah dibersihkan secara permanen.'
+              });
+            } catch (err) {
+              console.error(err);
+              setDialog({ type: 'alert', title: 'Kesalahan', message: 'Sistem gagal membersihkan data approval.' });
+            } finally {
+              setResetLoading(false);
+            }
+          }
+        });
+      } else {
+        setResetOtpError('Kode OTP salah atau tidak cocok. Periksa pop-up simulasi di pojok kanan atas.');
+      }
+    };
+
     return (
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 max-w-lg mx-auto">
-        <h2 className="text-lg font-semibold text-slate-800 mb-6 flex items-center"><Settings size={20} className="mr-2" /> Pengaturan Parameter Lembur</h2>
-        
-        {saved && <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-lg text-sm flex items-center"><Check size={16} className="mr-2" /> Parameter berhasil disimpan permanen.</div>}
-        
-        <form onSubmit={handleSave} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Maksimal Lembur per Hari (Jam)</label>
-            <input 
-              type="number" 
-              step="0.5" 
-              required 
-              value={localParams.maxPerDay === '' || Number.isNaN(localParams.maxPerDay) ? '' : localParams.maxPerDay} 
-              onChange={e => setLocalParams({...localParams, maxPerDay: e.target.value === '' ? '' : parseFloat(e.target.value)})} 
-              className="w-full p-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white text-sm" 
-            />
+      <div className="max-w-lg mx-auto space-y-6 text-left">
+        {/* Card 1: Form Parameter */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+          <h2 className="text-lg font-semibold text-slate-800 mb-6 flex items-center"><Settings size={20} className="mr-2 text-blue-600" /> Pengaturan Parameter Lembur</h2>
+          
+          {saved && <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-lg text-sm flex items-center"><Check size={16} className="mr-2" /> Parameter berhasil disimpan permanen.</div>}
+          
+          <form onSubmit={handleSave} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Maksimal Lembur per Hari (Jam)</label>
+              <input 
+                type="number" 
+                step="0.5" 
+                required 
+                value={localParams.maxPerDay === '' || Number.isNaN(localParams.maxPerDay) ? '' : localParams.maxPerDay} 
+                onChange={e => setLocalParams({...localParams, maxPerDay: e.target.value === '' ? '' : parseFloat(e.target.value)})} 
+                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white text-sm" 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Maksimal Lembur per Bulan (Jam)</label>
+              <input 
+                type="number" 
+                step="1" 
+                required 
+                value={localParams.maxPerMonth === '' || Number.isNaN(localParams.maxPerMonth) ? '' : localParams.maxPerMonth} 
+                onChange={e => setLocalParams({...localParams, maxPerMonth: e.target.value === '' ? '' : parseFloat(e.target.value)})} 
+                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white text-sm" 
+              />
+            </div>
+            <div className="pt-4">
+              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors cursor-pointer text-sm shadow-sm">
+                Simpan Parameter
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Card 2: Submenu Reset Data Approval */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 border-t-4 border-t-red-500">
+          <h2 className="text-lg font-semibold text-slate-800 mb-3 flex items-center"><AlertTriangle size={20} className="mr-2 text-red-500" /> Reset Data Approval</h2>
+          <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+            Gunakan submenu ini untuk menghapus seluruh input data lembur yang dikirimkan oleh Maker (baik berstatus Pending, Registered, Approved, maupun Reject). Tindakan ini membutuhkan verifikasi keamanan tingkat tinggi.
+          </p>
+          <button 
+            type="button" 
+            onClick={handleInitResetFlow}
+            disabled={resetLoading}
+            className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 p-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            {resetLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            Mulai Reset Data Approval
+          </button>
+        </div>
+
+        {/* MODAL DIALOG RESET DATA & VERIFIKASI OTP */}
+        {showResetModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900 bg-opacity-70 p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4 border-b pb-3">
+                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-1.5">
+                    <ShieldCheck size={18} className="text-red-500" /> Verifikasi Keamanan Reset
+                  </h3>
+                  <button 
+                    onClick={() => setShowResetModal(false)}
+                    className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {resetStep === 1 && (
+                  <div className="space-y-4 text-left">
+                    <div className="p-3 bg-red-50 border border-red-100 text-red-800 rounded-xl text-xs flex gap-2.5">
+                      <AlertTriangle size={24} className="flex-shrink-0 mt-0.5 text-red-500" />
+                      <div className="leading-relaxed">
+                        <strong className="font-bold">PERINGATAN KERAS!</strong> Anda akan menghapus seluruh data pengajuan lembur yang tersimpan di dalam database cloud. Tindakan ini tidak dapat dibatalkan.
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Sistem akan mengirimkan kode OTP keamanan 6-digit acak ke nomor WhatsApp Admin terdaftar sebelum melanjutkan tindakan kritis ini.
+                    </p>
+                    <div className="flex gap-2 pt-2">
+                      <button 
+                        type="button" 
+                        onClick={() => setShowResetModal(false)} 
+                        className="flex-1 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={handleSendResetOtp}
+                        className="flex-1 py-2.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                      >
+                        <MessageSquare size={14} /> Kirim OTP ke WA Admin
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {resetStep === 2 && (
+                  <form onSubmit={handleVerifyResetOtp} className="space-y-4 text-left">
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Kode OTP Keamanan telah disimulasikan melalui WhatsApp Web. Masukkan kode verifikasi OTP 6-digit angka tersebut di bawah ini untuk mengonfirmasi identitas Anda:
+                    </p>
+                    
+                    <div className="bg-amber-50 border border-amber-100 text-amber-800 p-2.5 rounded-lg text-[10px] leading-relaxed mb-1">
+                      <span className="font-bold">Info Simulasi:</span> Periksa pop-up banner WhatsApp di pojok kanan atas layar Anda untuk melihat kode OTP simulasi secara cepat.
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider text-center">Masukkan 6 Digit OTP Keamanan</label>
+                      <input 
+                        type="text" 
+                        maxLength={6}
+                        required 
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        placeholder="______"
+                        value={enteredResetOtp}
+                        onChange={e => setEnteredResetOtp(e.target.value.replace(/[^0-9]/g, ''))}
+                        className="w-full p-3 border border-slate-300 rounded-xl text-center font-mono text-xl tracking-widest font-bold focus:ring-2 focus:ring-red-500 bg-slate-50"
+                      />
+                    </div>
+
+                    {resetOtpError && (
+                      <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2 rounded">
+                        <AlertCircle size={14} className="mr-1 flex-shrink-0" /> {resetOtpError}
+                      </p>
+                    )}
+
+                    <div className="flex gap-2 pt-2">
+                      <button 
+                        type="button" 
+                        onClick={handleSendResetOtp} 
+                        className="flex-1 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+                      >
+                        Kirim Ulang OTP
+                      </button>
+                      <button 
+                        type="submit" 
+                        className="flex-1 py-2.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-sm cursor-pointer"
+                      >
+                        Verifikasi OTP
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Maksimal Lembur per Bulan (Jam)</label>
-            <input 
-              type="number" 
-              step="1" 
-              required 
-              value={localParams.maxPerMonth === '' || Number.isNaN(localParams.maxPerMonth) ? '' : localParams.maxPerMonth} 
-              onChange={e => setLocalParams({...localParams, maxPerMonth: e.target.value === '' ? '' : parseFloat(e.target.value)})} 
-              className="w-full p-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white text-sm" 
-            />
-          </div>
-          <div className="pt-4">
-            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors cursor-pointer text-sm shadow-sm">
-              Simpan Parameter
-            </button>
-          </div>
-        </form>
+        )}
       </div>
     );
   };
