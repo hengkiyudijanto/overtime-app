@@ -30,7 +30,9 @@ import {
   SlidersHorizontal,
   Calendar,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  DownloadCloud,
+  Smartphone
 } from 'lucide-react';
 
 import { initializeApp } from 'firebase/app';
@@ -120,6 +122,11 @@ export default function App() {
   const [isPrintMode, setIsPrintMode] = useState(false);
   const [generating, setGenerating] = useState(false);
 
+  // --- STATE PWA (PROGRESSIVE WEB APP) ---
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isIosPromptVisible, setIsIosPromptVisible] = useState(false);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+
   const BTN_LOGO_FALLBACK = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 50'%3E%3Ctext x='5' y='42' font-family='system-ui, -apple-system, sans-serif' font-weight='950' font-size='45' fill='%23006cb7' letter-spacing='-3'%3Ebtn%3C/text%3E%3Cpolygon points='68,14 92,6 88,2 64,10' fill='%23e21a22' /%3E%3C/svg%3E";
 
   const getEmployeeName = (nip) => {
@@ -135,6 +142,54 @@ export default function App() {
       document.body.appendChild(script);
     }
   }, []);
+
+  // --- EVENT LISTENER PWA INSTALLATION ---
+  useEffect(() => {
+    // Mengecek apakah aplikasi sudah dijalankan dalam mode standalone (sudah di-install)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone || document.referrer.includes('android-app://');
+    setIsAppInstalled(isStandalone);
+
+    // Menangkap event instalasi Android (Chrome/Edge)
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Deteksi perangkat iOS (Safari tidak mendukung beforeinstallprompt secara otomatis)
+    const isIos = () => {
+      const userAgent = window.navigator.userAgent.toLowerCase();
+      return /iphone|ipad|ipod/.test(userAgent);
+    };
+
+    if (isIos() && !isStandalone) {
+      setIsIosPromptVisible(true);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallPwa = async () => {
+    if (deferredPrompt) {
+      // Tampilkan prompt instalasi native Android
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        setIsAppInstalled(true);
+      }
+    } else if (isIosPromptVisible) {
+      // Tampilkan instruksi manual untuk pengguna iOS
+      setDialog({
+        type: 'alert',
+        title: 'Install di iPhone / iPad',
+        message: 'Untuk memasang aplikasi ini: Ketuk ikon "Bagikan" (Share) di bagian bawah browser Safari Anda (ikon kotak dengan panah ke atas), lalu gulir ke bawah dan ketuk "Tambah ke Layar Utama" (Add to Home Screen).'
+      });
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -522,6 +577,7 @@ service cloud.firestore {
                 className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-mono tracking-widest text-center"
               />
             </div>
+
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Konfirmasi Kata Sandi Baru</label>
               <input 
@@ -535,11 +591,13 @@ service cloud.firestore {
                 className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-mono tracking-widest text-center"
               />
             </div>
+
             {newPasswordError && (
               <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2.5 rounded-lg">
                 <AlertCircle size={14} className="mr-1.5 flex-shrink-0" /> {newPasswordError}
               </p>
             )}
+
             <div className="bg-slate-50 p-3 rounded-lg text-[11px] text-slate-500 space-y-1">
               <span className="font-bold text-slate-600">Ketentuan Keamanan:</span>
               <ul className="list-disc pl-4 space-y-0.5">
@@ -547,11 +605,19 @@ service cloud.firestore {
                 <li>Hanya diperbolehkan berisi karakter <span className="font-semibold text-slate-700">angka (0-9)</span></li>
               </ul>
             </div>
+
             <div className="flex gap-2 pt-2">
-              <button type="button" onClick={() => setPendingPasswordChangeUser(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 p-3 rounded-xl font-semibold transition-all text-sm cursor-pointer">
+              <button 
+                type="button" 
+                onClick={() => setPendingPasswordChangeUser(null)} 
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 p-3 rounded-xl font-semibold transition-all text-sm cursor-pointer"
+              >
                 Kembali
               </button>
-              <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold transition-all text-sm shadow-md shadow-blue-200 cursor-pointer">
+              <button 
+                type="submit" 
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold transition-all text-sm shadow-md shadow-blue-200 cursor-pointer"
+              >
                 Simpan & Masuk
               </button>
             </div>
@@ -565,8 +631,9 @@ service cloud.firestore {
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4" style={{ backgroundColor: '#0b1329' }}>
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-100">
-          <div className="text-center mb-8">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-100 relative">
+          
+          <div className="text-center mb-8 mt-4">
             <div className="inline-flex p-3 bg-blue-50 rounded-full mb-4">
               <img 
                 src="Bank_BTN_logo.png" 
@@ -582,7 +649,14 @@ service cloud.firestore {
           <form onSubmit={handleLoginSubmit} className="space-y-5">
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Pilih Akun Petugas</label>
-              <select value={selectedNip} onChange={e => { setSelectedNip(e.target.value); setPasswordError(false); }} className="w-full p-3 border border-slate-300 rounded-xl text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 cursor-pointer">
+              <select 
+                value={selectedNip}
+                onChange={e => {
+                  setSelectedNip(e.target.value);
+                  setPasswordError(false);
+                }}
+                className="w-full p-3 border border-slate-300 rounded-xl text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 cursor-pointer"
+              >
                 {employees.map(emp => (
                   <option key={emp.nip} value={emp.nip}>
                     {emp.nip} - {emp.name} ({((emp.role) || '').toUpperCase()})
@@ -590,10 +664,15 @@ service cloud.firestore {
                 ))}
               </select>
             </div>
+
             <div>
               <div className="flex justify-between items-center mb-1.5">
                 <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Kata Sandi</label>
-                <button type="button" onClick={() => setShowLupaPassword(true)} className="text-[10px] text-blue-600 hover:underline font-bold cursor-pointer">
+                <button 
+                  type="button" 
+                  onClick={() => setShowLupaPassword(true)}
+                  className="text-[10px] text-blue-600 hover:underline font-bold cursor-pointer"
+                >
                   Lupa Kata Sandi?
                 </button>
               </div>
@@ -603,22 +682,50 @@ service cloud.firestore {
                   required
                   placeholder="Password default = NIP"
                   value={enteredPassword}
-                  onChange={e => { setEnteredPassword(e.target.value); setPasswordError(false); }}
-                  className={`w-full p-3 pl-10 pr-10 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500 ${passwordError ? 'border-red-500 bg-red-50/50 font-sans' : 'border-slate-300 bg-slate-50 font-mono tracking-wide'}`}
+                  onChange={e => {
+                    setEnteredPassword(e.target.value);
+                    setPasswordError(false);
+                  }}
+                  className={`w-full p-3 pl-10 pr-10 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500 ${
+                    passwordError ? 'border-red-500 bg-red-50/50 font-sans' : 'border-slate-300 bg-slate-50 font-mono tracking-wide'
+                  }`}
                 />
                 <Lock size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
               {passwordError && (
-                <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center"><AlertCircle size={14} className="mr-1" /> Kata sandi salah! Default: NIP Anda.</p>
+                <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center">
+                  <AlertCircle size={14} className="mr-1" /> Kata sandi salah! Default: NIP Anda.
+                </p>
               )}
             </div>
-            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold transition-all shadow-md shadow-blue-200 mt-2 flex items-center justify-center cursor-pointer">
+
+            <button 
+              type="submit" 
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold transition-all shadow-md shadow-blue-200 mt-2 flex items-center justify-center cursor-pointer"
+            >
               Masuk ke Aplikasi
             </button>
           </form>
+
+          {/* TOMBOL INSTALASI PWA EKSKLUSIF */}
+          {!isAppInstalled && (deferredPrompt || isIosPromptVisible) && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <button 
+                onClick={handleInstallPwa}
+                className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white p-3 rounded-xl font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer animate-in fade-in"
+              >
+                {isIosPromptVisible ? <Smartphone size={18} /> : <DownloadCloud size={18} />}
+                {isIosPromptVisible ? "Cara Install di Layar Utama" : "Install Aplikasi (PWA)"}
+              </button>
+            </div>
+          )}
 
           <div className="mt-6 text-center border-t border-slate-100 pt-5">
             <p className="text-[11px] text-slate-400 leading-relaxed">
@@ -633,64 +740,194 @@ service cloud.firestore {
             <div className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-md w-full">
               <div className="p-6">
                 <div className="flex justify-between items-center mb-4 border-b pb-3">
-                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-1.5"><ShieldCheck size={18} className="text-blue-600" /> Lupa Kata Sandi Akun</h3>
-                  <button onClick={() => { setShowLupaPassword(false); setLupaStep(1); setLupaNip(''); }} className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"><X size={18} /></button>
+                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-1.5">
+                    <ShieldCheck size={18} className="text-blue-600" /> Lupa Kata Sandi Akun
+                  </h3>
+                  <button 
+                    onClick={() => {
+                      setShowLupaPassword(false);
+                      setLupaStep(1);
+                      setLupaNip('');
+                    }} 
+                    className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
+
                 {lupaStep === 1 && (
                   <form onSubmit={handleLupaStep1} className="space-y-4 text-left">
-                    <p className="text-xs text-slate-500 leading-relaxed">Masukkan NIP pegawai Anda yang valid. Sistem akan mencocokkan NIP serta mengecek ketersediaan nomor WhatsApp untuk proses reset.</p>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Masukkan NIP pegawai Anda yang valid. Sistem akan mencocokkan NIP serta mengecek ketersediaan nomor WhatsApp untuk proses reset.
+                    </p>
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Masukkan NIP Anda</label>
-                      <input type="text" required placeholder="Contoh: 6628" value={lupaNip} onChange={e => setLupaNip(e.target.value)} className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-medium" />
+                      <input 
+                        type="text" 
+                        required 
+                        placeholder="Contoh: 6628"
+                        value={lupaNip}
+                        onChange={e => setLupaNip(e.target.value)}
+                        className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-medium"
+                      />
                     </div>
-                    {lupaPasswordError && <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2 rounded"><AlertCircle size={14} className="mr-1 flex-shrink-0" /> {lupaPasswordError}</p>}
+
+                    {lupaPasswordError && (
+                      <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2 rounded">
+                        <AlertCircle size={14} className="mr-1 flex-shrink-0" /> {lupaPasswordError}
+                      </p>
+                    )}
+
                     <div className="flex justify-end gap-2 pt-2">
-                      <button type="button" onClick={() => setShowLupaPassword(false)} className="px-4 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Batal</button>
-                      <button type="submit" className="px-4 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm cursor-pointer">Lanjutkan</button>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowLupaPassword(false)} 
+                        className="px-4 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button 
+                        type="submit" 
+                        className="px-4 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm cursor-pointer"
+                      >
+                        Lanjutkan
+                      </button>
                     </div>
                   </form>
                 )}
+
                 {lupaStep === 2 && otpTargetEmployee && (
                   <div className="space-y-5 text-left">
-                    <div className="p-3 bg-blue-50 text-blue-800 rounded-xl text-xs flex gap-2"><AlertCircle size={18} className="flex-shrink-0 mt-0.5 text-blue-600" /><div>Sistem mendeteksi NIP tersebut didaftarkan atas nama <strong className="uppercase">{otpTargetEmployee.name}</strong>.</div></div>
-                    <div className="space-y-2">
-                      <p className="text-xs text-slate-500">Kode konfirmasi OTP berupa 6-digit angka akan dikirim ke nomor WhatsApp berikut:</p>
-                      <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-center font-bold text-slate-800 text-lg font-mono tracking-wider">{maskPhoneNumber(otpTargetEmployee.noHandphone)}</div>
+                    <div className="p-3 bg-blue-50 text-blue-800 rounded-xl text-xs flex gap-2">
+                      <AlertCircle size={18} className="flex-shrink-0 mt-0.5 text-blue-600" />
+                      <div>
+                        Sistem mendeteksi NIP tersebut didaftarkan atas nama <strong className="uppercase">{otpTargetEmployee.name}</strong>.
+                      </div>
                     </div>
+
+                    <div className="space-y-2">
+                      <p className="text-xs text-slate-500">
+                        Kode konfirmasi OTP berupa 6-digit angka akan dikirim ke nomor WhatsApp berikut:
+                      </p>
+                      <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-center font-bold text-slate-800 text-lg font-mono tracking-wider">
+                        {maskPhoneNumber(otpTargetEmployee.noHandphone)}
+                      </div>
+                    </div>
+
                     <div className="flex gap-2 pt-2">
-                      <button type="button" onClick={() => setLupaStep(1)} className="flex-1 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Kembali</button>
-                      <button type="button" onClick={handleKirimOtpWhatsApp} className="flex-1 py-2.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"><MessageSquare size={14} /> Kirim OTP ke WA</button>
+                      <button 
+                        type="button" 
+                        onClick={() => setLupaStep(1)} 
+                        className="flex-1 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+                      >
+                        Kembali
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={handleKirimOtpWhatsApp}
+                        className="flex-1 py-2.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                      >
+                        <MessageSquare size={14} /> Kirim OTP ke WA
+                      </button>
                     </div>
                   </div>
                 )}
+
                 {lupaStep === 3 && otpTargetEmployee && (
                   <form onSubmit={handleLupaStep3} className="space-y-4 text-left">
-                    <p className="text-xs text-slate-500 leading-relaxed">Kode OTP telah disimulasikan melalui WhatsApp. Harap salin atau masukkan kode verifikasi OTP 6-digit angka tersebut di bawah ini:</p>
-                    <div className="bg-amber-50 border border-amber-100 text-amber-800 p-2.5 rounded-lg text-[10px] leading-relaxed mb-1"><span className="font-bold">Info Simulasi:</span> Periksa pop-up banner WhatsApp di pojok kanan atas layar Anda untuk melihat kode OTP simulasi secara cepat.</div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Kode OTP telah disimulasikan melalui WhatsApp. Harap salin atau masukkan kode verifikasi OTP 6-digit angka tersebut di bawah ini:
+                    </p>
+                    
+                    <div className="bg-amber-50 border border-amber-100 text-amber-800 p-2.5 rounded-lg text-[10px] leading-relaxed mb-1">
+                      <span className="font-bold">Info Simulasi:</span> Periksa pop-up banner WhatsApp di pojok kanan atas layar Anda untuk melihat kode OTP simulasi secara cepat.
+                    </div>
+
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider text-center">Masukkan 6 Digit OTP</label>
-                      <input type="text" maxLength={6} required inputMode="numeric" pattern="[0-9]*" placeholder="______" value={enteredOtp} onChange={e => setEnteredOtp(e.target.value.replace(/[^0-9]/g, ''))} className="w-full p-3 border border-slate-300 rounded-xl text-center font-mono text-xl tracking-widest font-bold focus:ring-2 focus:ring-blue-500 bg-slate-50" />
+                      <input 
+                        type="text" 
+                        maxLength={6}
+                        required 
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        placeholder="______"
+                        value={enteredOtp}
+                        onChange={e => setEnteredOtp(e.target.value.replace(/[^0-9]/g, ''))}
+                        className="w-full p-3 border border-slate-300 rounded-xl text-center font-mono text-xl tracking-widest font-bold focus:ring-2 focus:ring-blue-500 bg-slate-50"
+                      />
                     </div>
-                    {otpError && <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2 rounded"><AlertCircle size={14} className="mr-1 flex-shrink-0" /> {otpError}</p>}
+
+                    {otpError && (
+                      <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2 rounded">
+                        <AlertCircle size={14} className="mr-1 flex-shrink-0" /> {otpError}
+                      </p>
+                    )}
+
                     <div className="flex gap-2 pt-2">
-                      <button type="button" onClick={handleKirimOtpWhatsApp} className="flex-1 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Kirim Ulang OTP</button>
-                      <button type="submit" className="flex-1 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm cursor-pointer">Verifikasi OTP</button>
+                      <button 
+                        type="button" 
+                        onClick={handleKirimOtpWhatsApp} 
+                        className="flex-1 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+                      >
+                        Kirim Ulang OTP
+                      </button>
+                      <button 
+                        type="submit" 
+                        className="flex-1 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm cursor-pointer"
+                      >
+                        Verifikasi OTP
+                      </button>
                     </div>
                   </form>
                 )}
+
                 {lupaStep === 4 && (
                   <form onSubmit={handleLupaStep4} className="space-y-4 text-left">
-                    <p className="text-xs text-slate-500 leading-relaxed">Kode OTP Berhasil diverifikasi! Silakan tentukan kata sandi baru Anda (Wajib minimal 6 digit berupa angka).</p>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Kode OTP Berhasil diverifikasi! Silakan tentukan kata sandi baru Anda (Wajib minimal 6 digit berupa angka).
+                    </p>
+
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Kata Sandi Baru (Hanya Angka)</label>
-                      <input type="password" required inputMode="numeric" pattern="[0-9]*" placeholder="Buat minimal 6 digit angka" value={lupaPasswordForm.password} onChange={e => setLupaPasswordForm({ ...lupaPasswordForm, password: e.target.value.replace(/[^0-9]/g, '') })} className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-mono tracking-widest text-center" />
+                      <input 
+                        type="password" 
+                        required
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        placeholder="Buat minimal 6 digit angka"
+                        value={lupaPasswordForm.password}
+                        onChange={e => setLupaPasswordForm({ ...lupaPasswordForm, password: e.target.value.replace(/[^0-9]/g, '') })}
+                        className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-mono tracking-widest text-center"
+                      />
                     </div>
+
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Konfirmasi Kata Sandi Baru</label>
-                      <input type="password" required inputMode="numeric" pattern="[0-9]*" placeholder="Ketik ulang kata sandi baru" value={lupaPasswordForm.confirmPassword} onChange={e => setLupaPasswordForm({ ...lupaPasswordForm, confirmPassword: e.target.value.replace(/[^0-9]/g, '') })} className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-mono tracking-widest text-center" />
+                      <input 
+                        type="password" 
+                        required
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        placeholder="Ketik ulang kata sandi baru"
+                        value={lupaPasswordForm.confirmPassword}
+                        onChange={e => setLupaPasswordForm({ ...lupaPasswordForm, confirmPassword: e.target.value.replace(/[^0-9]/g, '') })}
+                        className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-mono tracking-widest text-center"
+                      />
                     </div>
-                    {lupaPasswordError && <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2.5 rounded-lg"><AlertCircle size={14} className="mr-1.5 flex-shrink-0" /> {lupaPasswordError}</p>}
-                    <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold text-xs transition-all shadow-md shadow-blue-200 flex items-center justify-center cursor-pointer">Simpan & Masuk ke Aplikasi</button>
+
+                    {lupaPasswordError && (
+                      <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2.5 rounded-lg">
+                        <AlertCircle size={14} className="mr-1.5 flex-shrink-0" /> {lupaPasswordError}
+                      </p>
+                    )}
+
+                    <button 
+                      type="submit" 
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold text-xs transition-all shadow-md shadow-blue-200 flex items-center justify-center cursor-pointer"
+                    >
+                      Simpan & Masuk ke Aplikasi
+                    </button>
                   </form>
                 )}
               </div>
@@ -709,45 +946,71 @@ service cloud.firestore {
     const [imageUploadingId, setImageUploadingId] = useState(null);
     const [myStatusFilter, setMyStatusFilter] = useState('all');
 
-    const [calendarDate, setCalendarDate] = useState(() => new Date(2026, 5, 1));
+    // Calendar navigation state
+    const [calendarDate, setCalendarDate] = useState(() => {
+      return new Date(2026, 5, 1);
+    });
 
     const calculateDuration = (start, end) => {
       if (!start || !end) return 0;
       const [startHour, startMin] = start.split(':').map(Number);
       const [endHour, endMin] = end.split(':').map(Number);
+      
       let startTotalMinutes = (startHour * 60) + startMin;
       let endTotalMinutes = (endHour * 60) + endMin;
+      
       let diffMinutes = endTotalMinutes - startTotalMinutes;
-      if (diffMinutes < 0) diffMinutes += (24 * 60); 
+      if (diffMinutes < 0) {
+        diffMinutes += (24 * 60); 
+      }
+      
       return diffMinutes / 60;
     };
 
     const selectedMonth = formData.date ? formData.date.substring(0, 7) : new Date(2026, 5, 2).toISOString().substring(0, 7);
-    const currentMonthRequests = requests.filter(r => r.nip === currentUser?.nip && r.date.startsWith(selectedMonth));
-    const processedHours = currentMonthRequests.filter(r => r.status === 'Approved' || r.status === 'Registered').reduce((sum, r) => sum + r.duration, 0);
-    const pendingHours = currentMonthRequests.filter(r => r.status === 'Pending').reduce((sum, r) => sum + r.duration, 0);
+    const currentMonthRequests = requests.filter(r => r.nip === currentUser.nip && r.date.startsWith(selectedMonth));
+    
+    const processedHours = currentMonthRequests
+      .filter(r => r.status === 'Approved' || r.status === 'Registered')
+      .reduce((sum, r) => sum + r.duration, 0);
+
+    const pendingHours = currentMonthRequests
+      .filter(r => r.status === 'Pending')
+      .reduce((sum, r) => sum + r.duration, 0);
+
     const remainingQuota = params.maxPerMonth - processedHours - pendingHours;
 
     const handleSubmit = async (e) => {
       e.preventDefault();
       setError('');
       setSuccess('');
+
       const duration = calculateDuration(formData.startTime, formData.endTime);
       
       if (duration <= 0) {
         setError('Waktu mulai harus berbeda dengan waktu selesai.');
         return;
       }
-      const isDuplicateDate = requests.some(r => r.nip === currentUser?.nip && r.date === formData.date && r.status !== 'Reject' && r.status !== 'Rejected');
+
+      // Validasi duplikasi tanggal aktif
+      const isDuplicateDate = requests.some(r => 
+        r.nip === currentUser.nip && 
+        r.date === formData.date && 
+        r.status !== 'Reject' && 
+        r.status !== 'Rejected'
+      );
+
       if (isDuplicateDate) {
         const [year, month, day] = formData.date.split('-');
         setError(`Gagal mengajukan! Anda sudah memiliki pengajuan lembur aktif pada tanggal ${parseInt(day, 10)}/${parseInt(month, 10)}/${year}. Silakan pilih tanggal lain.`);
         return;
       }
+
       if (duration > params.maxPerDay) {
         setError(`Durasi lembur (${duration.toFixed(1)} jam) melebihi batas maksimal harian (${params.maxPerDay} jam).`);
         return;
       }
+
       const projectedTotal = processedHours + pendingHours + duration;
       if (projectedTotal > params.maxPerMonth) {
         setError(`Gagal mengajukan! Total akumulasi lembur Anda bulan ini akan menjadi ${projectedTotal.toFixed(1)} jam, melebihi kuota bulanan (${params.maxPerMonth} jam). Sisa kuota Anda: ${Math.max(0, remainingQuota).toFixed(1)} jam.`);
@@ -755,7 +1018,18 @@ service cloud.firestore {
       }
 
       const id = Date.now().toString();
-      const newRequest = { id, nip: currentUser?.nip || '', date: formData.date, startTime: formData.startTime, endTime: formData.endTime, duration: duration, reason: formData.reason, status: 'Pending', atasan: currentUser?.atasan || '' };
+      const newRequest = {
+        id,
+        nip: currentUser.nip,
+        date: formData.date,
+        startTime: formData.startTime,
+        endTime: formData.endTime,
+        duration: duration,
+        reason: formData.reason,
+        status: 'Pending',
+        atasan: currentUser.atasan || ''
+      };
+
       try {
         await runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'requests', id), newRequest));
         setSuccess('Pengajuan lembur berhasil disimpan.');
@@ -768,7 +1042,9 @@ service cloud.firestore {
     const handleCameraUpload = (e, requestId) => {
       const file = e.target.files[0];
       if (!file) return;
+
       setImageUploadingId(requestId);
+
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = (event) => {
@@ -781,8 +1057,10 @@ service cloud.firestore {
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
+
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
             const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
             const reqRef = doc(db, 'artifacts', appId, 'public', 'data', 'requests', requestId);
@@ -792,6 +1070,7 @@ service cloud.firestore {
               setDialog({ type: 'alert', title: 'Berhasil', message: 'Foto bukti lembur berhasil disimpan.' });
             }
           } catch (err) {
+            console.error(err);
             setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal memproses gambar bukti.' });
           } finally {
             setImageUploadingId(null);
@@ -800,24 +1079,35 @@ service cloud.firestore {
       };
     };
 
-    const myRequests = requests.filter(r => r.nip === currentUser?.nip).sort((a,b) => b.id - a.id);
+    const myRequests = requests.filter(r => r.nip === currentUser.nip).sort((a,b) => b.id - a.id);
+    
     const filteredMyRequests = useMemo(() => {
       if (myStatusFilter === 'all') return myRequests;
       return myRequests.filter(r => r.status.toLowerCase() === myStatusFilter.toLowerCase());
     }, [myRequests, myStatusFilter]);
 
+    // Calendar Day Mapping Generator
     const calendarDays = useMemo(() => {
       const year = calendarDate.getFullYear();
       const month = calendarDate.getMonth();
       const firstDayOfMonth = new Date(year, month, 1).getDay();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
+      
       const dayArray = [];
-      for (let i = 0; i < (firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1); i++) dayArray.push(null);
-      for (let d = 1; d <= daysInMonth; d++) dayArray.push(new Date(year, month, d));
+      // Empty spots before the first day
+      for (let i = 0; i < (firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1); i++) {
+        dayArray.push(null);
+      }
+      for (let d = 1; d <= daysInMonth; d++) {
+        dayArray.push(new Date(year, month, d));
+      }
       return dayArray;
     }, [calendarDate]);
 
-    const changeCalendarMonth = (val) => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + val, 1));
+    const changeCalendarMonth = (val) => {
+      setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + val, 1));
+    };
+
     const getDayOvertimeStatus = (dateObj) => {
       if (!dateObj) return null;
       const formattedDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
@@ -828,10 +1118,13 @@ service cloud.firestore {
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Form Card */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 lg:col-span-2">
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Form Pengajuan Lembur Baru</h2>
             {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg flex items-center text-sm"><AlertCircle size={18} className="mr-2 flex-shrink-0" /> {error}</div>}
             {success && <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-lg flex items-center text-sm"><Check size={18} className="mr-2 flex-shrink-0" /> {success}</div>}
+            
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
@@ -842,12 +1135,24 @@ service cloud.firestore {
                 <input type="text" required placeholder="Contoh: Rekonsiliasi bulanan" value={formData.reason} onChange={e => setFormData({...formData, reason: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Waktu Mulai (24 Jam)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Waktu Kerja Mulai (24 Jam)</label>
                 <input type="time" required value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                
                 <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1.5 text-slate-600 font-medium">
-                  <div className="flex justify-between items-center"><span>Lembur Bulan Ini (Registered/Approved):</span><span className="font-semibold text-blue-600">{processedHours.toFixed(1)} Jam</span></div>
-                  <div className="flex justify-between items-center"><span>Sedang Diproses (Pending):</span><span className="font-semibold text-amber-600">{pendingHours.toFixed(1)} Jam</span></div>
-                  <div className="flex justify-between items-center pt-1.5 border-t border-slate-200"><span>Sisa Kuota Lembur Bulan Ini:</span><span className={`font-bold ${remainingQuota <= 0 ? 'text-red-600' : 'text-green-600'}`}>{Math.max(0, remainingQuota).toFixed(1)} Jam</span></div>
+                  <div className="flex justify-between items-center">
+                    <span>Lembur Bulan Ini (Registered/Approved):</span>
+                    <span className="font-semibold text-blue-600">{processedHours.toFixed(1)} Jam</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>Sedang Diproses (Pending):</span>
+                    <span className="font-semibold text-amber-600">{pendingHours.toFixed(1)} Jam</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1.5 border-t border-slate-200">
+                    <span>Sisa Kuota Lembur Bulan Ini:</span>
+                    <span className={`font-bold ${remainingQuota <= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {Math.max(0, remainingQuota).toFixed(1)} Jam
+                    </span>
+                  </div>
                 </div>
               </div>
               <div>
@@ -862,16 +1167,29 @@ service cloud.firestore {
             </form>
           </div>
 
+          {/* Visual Activity Calendar Card */}
           <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5"><Calendar size={16} className="text-blue-600" /> Kalender Aktivitas Lembur</h3>
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <Calendar size={16} className="text-blue-600" /> Kalender Aktivitas Lembur
+              </h3>
               <div className="flex items-center gap-1">
-                <button onClick={() => changeCalendarMonth(-1)} className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg cursor-pointer"><ChevronLeft size={16} /></button>
-                <span className="text-xs font-semibold text-slate-700 min-w-[70px] text-center uppercase">{calendarDate.toLocaleString('id-ID', { month: 'short', year: 'numeric' })}</span>
-                <button onClick={() => changeCalendarMonth(1)} className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg cursor-pointer"><ChevronRight size={16} /></button>
+                <button onClick={() => changeCalendarMonth(-1)} className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg cursor-pointer">
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="text-xs font-semibold text-slate-700 min-w-[70px] text-center uppercase">
+                  {calendarDate.toLocaleString('id-ID', { month: 'short', year: 'numeric' })}
+                </span>
+                <button onClick={() => changeCalendarMonth(1)} className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg cursor-pointer">
+                  <ChevronRight size={16} />
+                </button>
               </div>
             </div>
-            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-500 mb-2 border-b pb-1.5"><span>S</span><span>S</span><span>R</span><span>K</span><span>J</span><span>S</span><span>M</span></div>
+
+            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-500 mb-2 border-b pb-1.5">
+              <span>S</span><span>S</span><span>R</span><span>K</span><span>J</span><span>S</span><span>M</span>
+            </div>
+
             <div className="grid grid-cols-7 gap-1">
               {calendarDays.map((day, idx) => {
                 if (!day) return <div key={`empty-${idx}`} className="aspect-square"></div>;
@@ -881,24 +1199,52 @@ service cloud.firestore {
                 else if (status === 'Pending') bgStyle = "bg-yellow-400 text-slate-900 font-bold animate-pulse";
                 else if (status === 'Registered') bgStyle = "bg-indigo-500 text-white font-bold";
                 else if (status === 'Reject' || status === 'Rejected') bgStyle = "bg-red-500 text-white font-bold";
-                return <div key={`day-${idx}`} title={status ? `${day.getDate()} - Status: ${status}` : `${day.getDate()}`} className={`aspect-square flex items-center justify-center text-xs rounded-lg transition-all ${bgStyle}`}>{day.getDate()}</div>;
+
+                return (
+                  <div 
+                    key={`day-${idx}`} 
+                    title={status ? `${day.getDate()} - Status: ${status}` : `${day.getDate()}`}
+                    className={`aspect-square flex items-center justify-center text-xs rounded-lg transition-all ${bgStyle}`}
+                  >
+                    {day.getDate()}
+                  </div>
+                );
               })}
             </div>
+
             <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 gap-2 text-[10px] text-slate-500 font-medium">
-              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-yellow-400 rounded-full inline-block"></span><span>Pending (Tahap 1)</span></div>
-              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-indigo-500 rounded-full inline-block"></span><span>Registered (Tahap 2)</span></div>
-              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-green-500 rounded-full inline-block"></span><span>Approved (Selesai)</span></div>
-              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-red-500 rounded-full inline-block"></span><span>Ditolak / Reject</span></div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-yellow-400 rounded-full inline-block"></span>
+                <span>Pending (Tahap 1)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-indigo-500 rounded-full inline-block"></span>
+                <span>Registered (Tahap 2)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-green-500 rounded-full inline-block"></span>
+                <span>Approved (Selesai)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-red-500 rounded-full inline-block"></span>
+                <span>Ditolak / Reject</span>
+              </div>
             </div>
           </div>
+
         </div>
 
+        {/* Overtime History List */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
             <h2 className="text-lg font-semibold text-slate-800">Riwayat Pengajuan Saya</h2>
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <SlidersHorizontal size={14} className="text-slate-400 flex-shrink-0" />
-              <select value={myStatusFilter} onChange={e => setMyStatusFilter(e.target.value)} className="p-1.5 px-3 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-slate-50 bg-white cursor-pointer w-full sm:w-auto">
+              <select 
+                value={myStatusFilter}
+                onChange={e => setMyStatusFilter(e.target.value)}
+                className="p-1.5 px-3 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-slate-50 bg-white cursor-pointer w-full sm:w-auto"
+              >
                 <option value="all">Saring Status: Semua</option>
                 <option value="pending">Pending</option>
                 <option value="registered">Registered</option>
@@ -907,6 +1253,7 @@ service cloud.firestore {
               </select>
             </div>
           </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -930,20 +1277,58 @@ service cloud.firestore {
                       <td className="p-3 max-w-[200px] truncate" title={req.reason}>{req.reason}</td>
                       <td className="p-3">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
-                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium self-start ${req.status === 'Approved' ? 'bg-green-100 text-green-700' : (req.status === 'Reject' || req.status === 'Rejected') ? 'bg-red-100 text-red-700' : req.status === 'Registered' ? 'bg-indigo-100 text-indigo-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status}</span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium self-start ${
+                            req.status === 'Approved' ? 'bg-green-100 text-green-700' : 
+                            (req.status === 'Reject' || req.status === 'Rejected') ? 'bg-red-100 text-red-700' :
+                            req.status === 'Registered' ? 'bg-indigo-100 text-indigo-700' : 'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {req.status}
+                          </span>
+                          
                           {req.status === 'Registered' && (
                             <div className="flex items-center gap-2">
                               {imageUploadingId === req.id ? (
-                                <div className="flex items-center gap-1 text-xs text-blue-600 font-medium"><Loader2 size={14} className="animate-spin" /><span>Mengunggah...</span></div>
+                                <div className="flex items-center gap-1 text-xs text-blue-600 font-medium">
+                                  <Loader2 size={14} className="animate-spin" />
+                                  <span>Mengunggah...</span>
+                                </div>
                               ) : req.imageUrl ? (
                                 <div className="flex items-center gap-2">
-                                  <div className="relative group"><img src={req.imageUrl} alt="Bukti Lembur" onClick={() => setDialog({ type: 'lightbox', title: `Bukti Foto Lembur (${req.date})`, imageUrl: req.imageUrl })} className="w-10 h-10 object-cover rounded-lg border border-slate-200 cursor-zoom-in hover:opacity-85 transition-all shadow-sm" /></div>
-                                  <label htmlFor={`reupload-${req.id}`} className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors border border-blue-100 flex items-center justify-center cursor-pointer" title="Unggah Ulang Bukti"><Camera size={14} /></label>
+                                  <div className="relative group">
+                                    <img 
+                                      src={req.imageUrl} 
+                                      alt="Bukti Lembur" 
+                                      onClick={() => setDialog({ type: 'lightbox', title: `Bukti Foto Lembur (${req.date})`, imageUrl: req.imageUrl })}
+                                      className="w-10 h-10 object-cover rounded-lg border border-slate-200 cursor-zoom-in hover:opacity-85 transition-all shadow-sm"
+                                    />
+                                  </div>
+                                  
+                                  <label 
+                                    htmlFor={`reupload-${req.id}`}
+                                    className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors border border-blue-100 flex items-center justify-center cursor-pointer"
+                                    title="Unggah Ulang Bukti"
+                                  >
+                                    <Camera size={14} />
+                                  </label>
                                 </div>
                               ) : (
-                                <label htmlFor={`upload-${req.id}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-semibold cursor-pointer border border-blue-200 transition-all shadow-sm"><Camera size={13} /><span>Ambil Foto Bukti</span></label>
+                                <label 
+                                  htmlFor={`upload-${req.id}`}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-semibold cursor-pointer border border-blue-200 transition-all shadow-sm"
+                                >
+                                  <Camera size={13} />
+                                  <span>Ambil Foto Bukti</span>
+                                </label>
                               )}
-                              <input type="file" accept="image/*" capture="environment" id={req.imageUrl ? `reupload-${req.id}` : `upload-${req.id}`} onChange={(e) => handleCameraUpload(e, req.id)} className="hidden" />
+                              
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                capture="environment" 
+                                id={req.imageUrl ? `reupload-${req.id}` : `upload-${req.id}`}
+                                onChange={(e) => handleCameraUpload(e, req.id)}
+                                className="hidden" 
+                              />
                             </div>
                           )}
                         </div>
@@ -962,9 +1347,12 @@ service cloud.firestore {
   // --- SUBVIEW 2: APPROVAL VIEW ---
   const ApprovalView = () => {
     const activeRequests = requests.filter(r => {
-      const isMyBawahan = r.atasan === currentUser?.nip || currentUser?.role === 'admin' || currentUser?.role === 'manager';
+      const isMyBawahan = r.atasan === currentUser.nip || currentUser.role === 'admin' || currentUser.role === 'manager';
       if (!isMyBawahan) return false;
-      return r.status === 'Pending' || (r.status === 'Registered' && r.imageUrl);
+
+      const isPhase1 = r.status === 'Pending';
+      const isPhase2 = r.status === 'Registered' && r.imageUrl;
+      return isPhase1 || isPhase2;
     });
 
     const handleAction = async (id, action) => {
@@ -1026,16 +1414,33 @@ service cloud.firestore {
                     <td className="p-3 whitespace-nowrap">{req.startTime} - {req.endTime} <span className="text-slate-400">({req.duration.toFixed(1)}j)</span></td>
                     <td className="p-3 max-w-xs truncate" title={req.reason}>{req.reason}</td>
                     <td className="p-3 whitespace-nowrap">
-                      {req.status === 'Pending' ? <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-semibold">Tahap 1: Pengajuan</span> : <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs font-semibold">Tahap 2: Bukti Foto</span>}
+                      {req.status === 'Pending' ? (
+                        <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-semibold">
+                          Tahap 1: Pengajuan
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs font-semibold">
+                          Tahap 2: Bukti Foto
+                        </span>
+                      )}
                     </td>
                     <td className="p-3 text-center whitespace-nowrap">
                       {req.status === 'Pending' ? (
                         <div className="flex justify-center gap-2">
-                          <button onClick={() => handleAction(req.id, 'Registered')} className="p-1.5 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded transition-colors cursor-pointer" title="Daftarkan (Registered)"><Check size={16} /></button>
-                          <button onClick={() => handleAction(req.id, 'Reject')} className="p-1.5 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded transition-colors cursor-pointer" title="Tolak"><X size={16} /></button>
+                          <button onClick={() => handleAction(req.id, 'Registered')} className="p-1.5 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded transition-colors cursor-pointer" title="Daftarkan (Registered)">
+                            <Check size={16} />
+                          </button>
+                          <button onClick={() => handleAction(req.id, 'Reject')} className="p-1.5 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded transition-colors cursor-pointer" title="Tolak">
+                            <X size={16} />
+                          </button>
                         </div>
                       ) : (
-                        <button onClick={() => triggerVerifyModal(req)} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer">Verifikasi</button>
+                        <button 
+                          onClick={() => triggerVerifyModal(req)}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer"
+                        >
+                          Verifikasi
+                        </button>
                       )}
                     </td>
                   </tr>
@@ -1068,13 +1473,19 @@ service cloud.firestore {
     };
 
     const handleEdit = (emp) => {
-      setEditForm({ ...emp, noHandphone: emp.noHandphone || '' });
+      setEditForm({
+        ...emp,
+        noHandphone: emp.noHandphone || ''
+      });
       setIsEditing(true);
     };
 
     const handleDelete = (nip) => {
       setDialog({
-        type: 'confirm', title: 'Hapus Pegawai', message: 'Yakin ingin menghapus data pegawai ini secara permanen?', isDanger: true,
+        type: 'confirm',
+        title: 'Hapus Pegawai',
+        message: 'Yakin ingin menghapus data pegawai ini secara permanen?',
+        isDanger: true,
         onConfirm: async () => {
           try {
             await runWithRetry(() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', nip)));
@@ -1087,7 +1498,10 @@ service cloud.firestore {
 
     const handleDeleteAll = () => {
       setDialog({
-        type: 'confirm', title: 'Hapus Semua Data', message: 'PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA data pegawai saat ini? (Kecuali Administrator).', isDanger: true,
+        type: 'confirm',
+        title: 'Hapus Semua Data',
+        message: 'PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA data pegawai saat ini? (Kecuali Administrator).',
+        isDanger: true,
         onConfirm: async () => {
           try {
             const batch = writeBatch(db);
@@ -1110,65 +1524,98 @@ service cloud.firestore {
     const handleImportFile = (e) => {
       const file = e.target.files[0];
       if (!file) return;
+      
       if (!window.XLSX) {
         setDialog({ type: 'alert', title: 'Sistem Sibuk', message: 'Sedang memuat library Excel. Silakan coba klik tombol kembali.' });
         return;
       }
+
       const reader = new FileReader();
       reader.onload = async (event) => {
         const data = new Uint8Array(event.target.result);
         const workbook = window.XLSX.read(data, { type: 'array' });
+        
         let count = 0;
         let dataFound = false;
         const batch = writeBatch(db);
+        
         for (const sheetName of workbook.SheetNames) {
           const worksheet = workbook.Sheets[sheetName];
           const rows = window.XLSX.utils.sheet_to_json(worksheet);
+          
           const employeeMap = {};
           for (const r of rows) {
             const keys = Object.keys(r);
             const nK = keys.find(k => k.trim().toLowerCase() === 'full name' || k.trim().toLowerCase() === 'nama');
             const niK = keys.find(k => k.trim().toLowerCase() === 'nip' || k.trim().toLowerCase() === 'nik');
-            if (nK && niK) employeeMap[String(r[nK]).trim().toLowerCase()] = String(r[niK]).trim();
+            if (nK && niK) {
+              employeeMap[String(r[nK]).trim().toLowerCase()] = String(r[niK]).trim();
+            }
           }
+          
           for (const row of rows) {
             const keys = Object.keys(row);
+            
             const nipKey = keys.find(k => k.trim().toLowerCase() === 'nip' || k.trim().toLowerCase() === 'nik');
-            const nameKey = keys.find(k => { const kClean = k.trim().toLowerCase(); return kClean === 'full name' || kClean === 'nama' || kClean.includes('name'); });
+            const nameKey = keys.find(k => {
+              const kClean = k.trim().toLowerCase();
+              return kClean === 'full name' || kClean === 'nama' || kClean.includes('name');
+            });
             const posKey = keys.find(k => k.trim().toLowerCase() === 'position' || k.trim().toLowerCase() === 'jabatan' || k.trim().toLowerCase().includes('position'));
             const phoneKey = keys.find(k => k.trim().toLowerCase() === 'no handphone' || k.trim().toLowerCase().includes('handphone') || k.trim().toLowerCase().includes('hp'));
             const atasanKey = keys.find(k => k.trim().toLowerCase().includes('atasan'));
-            const roleKey = keys.find(k => { const kClean = k.trim().toLowerCase(); return kClean === 'role' || kClean === 'status' || kClean === 'hak akses' || kClean.includes('status') || kClean.includes('role'); });
+            
+            const roleKey = keys.find(k => {
+              const kClean = k.trim().toLowerCase();
+              return kClean === 'role' || kClean === 'status' || kClean === 'hak akses' || kClean.includes('status') || kClean.includes('role');
+            });
 
             if (nipKey && nameKey) {
               dataFound = true; 
+              
               const nip = String(row[nipKey] || '').trim();
               const name = String(row[nameKey] || '').trim();
               const position = posKey ? String(row[posKey] || '').trim() : '';
               const noHandphone = phoneKey ? String(row[phoneKey] || '').trim() : '';
               let atasanRaw = atasanKey ? String(row[atasanKey] || '').trim() : '';
+              
               if (atasanRaw && isNaN(atasanRaw)) {
                 const mappedNip = employeeMap[atasanRaw.toLowerCase()];
-                if (mappedNip) atasanRaw = mappedNip;
+                if (mappedNip) {
+                  atasanRaw = mappedNip;
+                }
               }
+              
               if (nip && name && nip !== 'undefined' && nip !== 'admin' && !employees.some(emp => emp.nip === nip)) {
                 let role = 'maker';
                 const importedRole = roleKey ? String(row[roleKey] || '').trim().toLowerCase() : '';
+                
                 if (importedRole) {
-                  if (importedRole.includes('admin')) role = 'admin';
-                  else if (importedRole.includes('manager')) role = 'manager';
-                  else if (importedRole.includes('approval') || importedRole.includes('approver') || importedRole.includes('atasan')) role = 'approval';
-                  else if (importedRole.includes('maker') || importedRole.includes('staff') || importedRole.includes('karyawan') || importedRole.includes('biasa')) role = 'maker';
-                  else {
+                  if (importedRole.includes('admin')) {
+                    role = 'admin';
+                  } else if (importedRole.includes('manager')) {
+                    role = 'manager';
+                  } else if (importedRole.includes('approval') || importedRole.includes('approver') || importedRole.includes('atasan')) {
+                    role = 'approval';
+                  } else if (importedRole.includes('maker') || importedRole.includes('staff') || importedRole.includes('karyawan') || importedRole.includes('biasa')) {
+                    role = 'maker';
+                  } else {
                     const lowerPos = position.toLowerCase();
-                    if (lowerPos.includes('branch manager')) role = 'admin'; 
-                    else if (lowerPos.includes('manager') || lowerPos.includes('dbm')) role = 'approval';
+                    if (lowerPos.includes('branch manager')) {
+                      role = 'admin'; 
+                    } else if (lowerPos.includes('manager') || lowerPos.includes('dbm')) {
+                      role = 'approval';
+                    }
                   }
                 } else {
                   const lowerPos = position.toLowerCase();
-                  if (lowerPos.includes('branch manager')) role = 'admin'; 
-                  else if (lowerPos.includes('manager') || lowerPos.includes('dbm')) role = 'approval';
+                  if (lowerPos.includes('branch manager')) {
+                    role = 'admin'; 
+                  } else if (lowerPos.includes('manager') || lowerPos.includes('dbm')) {
+                    role = 'approval';
+                  }
                 }
+                
                 const newEmp = { ...row, nip, name, position, noHandphone, role, atasan: atasanRaw };
                 const ref = doc(db, 'artifacts', appId, 'public', 'data', 'employees', nip);
                 batch.set(ref, newEmp);
@@ -1178,6 +1625,7 @@ service cloud.firestore {
           }
           if (dataFound) break;
         }
+        
         if (count > 0) {
           try {
             await runWithRetry(() => batch.commit());
@@ -1192,14 +1640,18 @@ service cloud.firestore {
         }
         setTimeout(() => setImportSuccess(''), 5000);
       };
+      
       reader.readAsArrayBuffer(file);
       e.target.value = null; 
     };
 
+    // Filter employees with search state and role
     const filteredEmployees = useMemo(() => {
       return employees.filter(emp => {
         const query = searchTerm.toLowerCase();
-        const matchesSearch = emp.name.toLowerCase().includes(query) || emp.nip.toLowerCase().includes(query) || (emp.position && emp.position.toLowerCase().includes(query));
+        const matchesSearch = emp.name.toLowerCase().includes(query) || 
+                              emp.nip.toLowerCase().includes(query) || 
+                              (emp.position && emp.position.toLowerCase().includes(query));
         const matchesRole = roleFilter === 'all' || emp.role === roleFilter;
         return matchesSearch && matchesRole;
       });
@@ -1211,17 +1663,36 @@ service cloud.firestore {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
             <h2 className="text-lg font-semibold text-slate-800">{isEditing ? 'Edit Pegawai' : 'Tambah Pegawai Baru'}</h2>
             <div className="flex gap-2 w-full sm:w-auto">
-              <button type="button" onClick={handleDeleteAll} className="flex-1 sm:flex-none bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center cursor-pointer"><Trash2 size={16} className="mr-2"/> Hapus Semua</button>
+              <button type="button" onClick={handleDeleteAll} className="flex-1 sm:flex-none bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center cursor-pointer">
+                <Trash2 size={16} className="mr-2"/> Hapus Semua
+              </button>
+              
               <input type="file" id="fileUpload" accept=".csv, .xls, .xlsx" onChange={handleImportFile} className="hidden" />
-              <label htmlFor="fileUpload" className="flex-1 sm:flex-none cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center cursor-pointer"><Upload size={16} className="mr-2"/> Import CSV/Excel</label>
+              <label htmlFor="fileUpload" className="flex-1 sm:flex-none cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center cursor-pointer">
+                <Upload size={16} className="mr-2"/> Import CSV/Excel
+              </label>
             </div>
           </div>
+          
           {importSuccess && <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-lg text-sm flex items-center"><Check size={18} className="mr-2" /> {importSuccess}</div>}
+          
           <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            <div><label className="block text-xs font-medium text-slate-700 mb-1">NIP</label><input type="text" required value={editForm.nip} disabled={isEditing && employees.some(e=>e.nip === editForm.nip)} onChange={e => setEditForm({...editForm, nip: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white" /></div>
-            <div><label className="block text-xs font-medium text-slate-700 mb-1">Nama Lengkap</label><input type="text" required value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white" /></div>
-            <div><label className="block text-xs font-medium text-slate-700 mb-1">Jabatan (Position)</label><input type="text" required value={editForm.position} onChange={e => setEditForm({...editForm, position: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white" /></div>
-            <div><label className="block text-xs font-medium text-slate-700 mb-1">No Handphone</label><input type="text" placeholder="Contoh: 0852xxxx" value={editForm.noHandphone} onChange={e => setEditForm({...editForm, noHandphone: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white" /></div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">NIP</label>
+              <input type="text" required value={editForm.nip} disabled={isEditing && employees.some(e=>e.nip === editForm.nip)} onChange={e => setEditForm({...editForm, nip: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Nama Lengkap</label>
+              <input type="text" required value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Jabatan (Position)</label>
+              <input type="text" required value={editForm.position} onChange={e => setEditForm({...editForm, position: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">No Handphone</label>
+              <input type="text" placeholder="Contoh: 0852xxxx" value={editForm.noHandphone} onChange={e => setEditForm({...editForm, noHandphone: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white" />
+            </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Status (Role)</label>
               <select value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white">
@@ -1241,19 +1712,36 @@ service cloud.firestore {
               </select>
             </div>
             <div className="flex items-end gap-2 md:col-span-2 lg:col-span-1">
-              <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors w-full flex items-center justify-center cursor-pointer">{isEditing ? <><Check size={16} className="mr-2"/> Simpan</> : <><Plus size={16} className="mr-2"/> Tambah</>}</button>
-              {isEditing && <button type="button" onClick={() => {setIsEditing(false); setEditForm({ nip: '', name: '', position: '', noHandphone: '', role: 'maker', atasan: '' })}} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">Batal</button>}
+              <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors w-full flex items-center justify-center cursor-pointer">
+                {isEditing ? <><Check size={16} className="mr-2"/> Simpan</> : <><Plus size={16} className="mr-2"/> Tambah</>}
+              </button>
+              {isEditing && (
+                <button type="button" onClick={() => {setIsEditing(false); setEditForm({ nip: '', name: '', position: '', noHandphone: '', role: 'maker', atasan: '' })}} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
+                  Batal
+                </button>
+              )}
             </div>
           </form>
         </div>
 
+        {/* Search & Filter Bar */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
-            <input type="text" placeholder="Cari Pegawai berdasarkan Nama, NIP atau Jabatan..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 p-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500" />
+            <input 
+              type="text"
+              placeholder="Cari Pegawai berdasarkan Nama, NIP atau Jabatan..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 p-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           <div className="flex gap-2">
-            <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className="p-2.5 px-4 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white cursor-pointer">
+            <select 
+              value={roleFilter}
+              onChange={e => setRoleFilter(e.target.value)}
+              className="p-2.5 px-4 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white cursor-pointer"
+            >
               <option value="all">Saring Role: Semua</option>
               <option value="admin">ADMIN</option>
               <option value="manager">MANAGER</option>
@@ -1263,6 +1751,7 @@ service cloud.firestore {
           </div>
         </div>
 
+        {/* Data Table */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="overflow-auto max-h-[55vh]">
             <table className="w-full text-left border-collapse relative whitespace-nowrap">
@@ -1284,14 +1773,28 @@ service cloud.firestore {
                   filteredEmployees.map(emp => (
                     <tr key={emp.nip} className="border-b border-slate-100 text-sm hover:bg-slate-50">
                       <td className="p-3 flex justify-center gap-2">
-                        <button onClick={() => handleEdit(emp)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded cursor-pointer" title="Edit"><Edit size={16} /></button>
-                        {emp.nip !== 'admin' && <button onClick={() => handleDelete(emp.nip)} className="p-1.5 text-red-600 hover:bg-red-50 rounded cursor-pointer" title="Hapus"><Trash2 size={16} /></button>}
+                        <button onClick={() => handleEdit(emp)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded cursor-pointer" title="Edit">
+                          <Edit size={16} />
+                        </button>
+                        {emp.nip !== 'admin' && (
+                          <button onClick={() => handleDelete(emp.nip)} className="p-1.5 text-red-600 hover:bg-red-50 rounded cursor-pointer" title="Hapus">
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </td>
                       <td className="p-3">{emp.nip}</td>
                       <td className="p-3 font-medium text-slate-800">{emp.name}</td>
                       <td className="p-3 text-slate-500 truncate max-w-[200px]" title={emp.position}>{emp.position}</td>
                       <td className="p-3 text-slate-500">{emp.noHandphone || '-'}</td>
-                      <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${emp.role === 'admin' ? 'bg-purple-100 text-purple-700' : emp.role === 'manager' ? 'bg-indigo-100 text-indigo-700' : emp.role === 'approval' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}>{emp.role.toUpperCase()}</span></td>
+                      <td className="p-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          emp.role === 'admin' ? 'bg-purple-100 text-purple-700' : 
+                          emp.role === 'manager' ? 'bg-indigo-100 text-indigo-700' :
+                          emp.role === 'approval' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {emp.role.toUpperCase()}
+                        </span>
+                      </td>
                       <td className="p-3 text-slate-500 truncate max-w-[150px]">{emp.atasan ? getEmployeeName(emp.atasan) : '-'}</td>
                     </tr>
                   ))
@@ -1624,35 +2127,35 @@ service cloud.firestore {
 
     const accessibleAtasan = useMemo(() => {
       const allAtasan = employees.filter(e => e.role === 'approval' || e.role === 'manager' || e.role === 'admin');
-      if (currentUser?.role === 'admin') {
+      if (currentUser.role === 'admin') {
         return allAtasan;
       }
-      if (currentUser?.role === 'manager') {
-        return allAtasan.filter(e => e.atasan === currentUser?.nip);
+      if (currentUser.role === 'manager') {
+        return allAtasan.filter(e => e.atasan === currentUser.nip);
       }
       return [];
     }, [employees, currentUser]);
 
     const accessiblePegawai = useMemo(() => {
-      if (currentUser?.role === 'admin') {
+      if (currentUser.role === 'admin') {
         if (selectedAtasan === 'all') {
           return employees;
         } else {
           return employees.filter(e => e.atasan === selectedAtasan);
         }
       }
-      if (currentUser?.role === 'manager') {
+      if (currentUser.role === 'manager') {
         if (selectedAtasan === 'all') {
           const downlinerAtasanNips = accessibleAtasan.map(a => a.nip);
-          return employees.filter(e => e.atasan === currentUser?.nip || downlinerAtasanNips.includes(e.atasan));
+          return employees.filter(e => e.atasan === currentUser.nip || downlinerAtasanNips.includes(e.atasan));
         } else {
           return employees.filter(e => e.atasan === selectedAtasan);
         }
       }
-      if (currentUser?.role === 'approval') {
-        return employees.filter(e => e.nip === currentUser?.nip || e.atasan === currentUser?.nip);
+      if (currentUser.role === 'approval') {
+        return employees.filter(e => e.nip === currentUser.nip || e.atasan === currentUser.nip);
       }
-      return currentUser ? [currentUser] : [];
+      return [currentUser];
     }, [employees, currentUser, selectedAtasan, accessibleAtasan]);
 
     useEffect(() => {
@@ -1717,14 +2220,23 @@ service cloud.firestore {
       }
     };
 
+    // --- NEW: EXPORT TO EXCEL SYSTEM ---
     const handleExportExcel = () => {
       if (!window.XLSX) {
-        setDialog({ type: 'alert', title: 'Sistem Belum Siap', message: 'Library XLSX belum termuat sepenuhnya. Mohon coba sesaat lagi.' });
+        setDialog({
+          type: 'alert',
+          title: 'Sistem Belum Siap',
+          message: 'Library XLSX belum termuat sepenuhnya. Mohon coba sesaat lagi.'
+        });
         return;
       }
 
       if (filteredRequests.length === 0) {
-        setDialog({ type: 'alert', title: 'Data Kosong', message: 'Tidak ada data lembur pada filter saat ini untuk diekspor.' });
+        setDialog({
+          type: 'alert',
+          title: 'Data Kosong',
+          message: 'Tidak ada data lembur pada filter saat ini untuk diekspor.'
+        });
         return;
       }
 
@@ -1743,6 +2255,7 @@ service cloud.firestore {
       const workbook = window.XLSX.utils.book_new();
       window.XLSX.utils.book_append_sheet(workbook, worksheet, "Rincian Lembur");
       
+      // Auto-fit Column Widths
       const maxLens = {};
       rawExportData.forEach(row => {
         Object.keys(row).forEach(key => {
@@ -1759,15 +2272,45 @@ service cloud.firestore {
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 print-full-width">
         <style>{`
           @media print {
-            aside, header, nav, .no-print, button, select, input { display: none !important; }
-            body, .main-content { background: white !important; color: black !important; padding: 0 !important; margin: 0 !important; }
-            .print-full-width { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
-            .print-table { border: 1.5px solid #000 !important; border-collapse: collapse !important; width: 100% !important; }
-            .print-table th, .print-table td { border: 1px solid #000 !important; padding: 8px 10px !important; font-size: 11px !important; color: #000 !important; }
-            .print-header-section { display: block !important; }
-            .print-page-block { page-break-inside: avoid !important; page-break-after: always !important; break-after: page !important; }
+            aside, header, nav, .no-print, button, select, input {
+              display: none !important;
+            }
+            body, .main-content {
+              background: white !important;
+              color: black !important;
+              padding: 0 !important;
+              margin: 0 !important;
+            }
+            .print-full-width {
+              width: 100% !important;
+              max-width: 100% !important;
+              border: none !important;
+              box-shadow: none !important;
+              padding: 0 !important;
+            }
+            .print-table {
+              border: 1.5px solid #000 !important;
+              border-collapse: collapse !important;
+              width: 100% !important;
+            }
+            .print-table th, .print-table td {
+              border: 1px solid #000 !important;
+              padding: 8px 10px !important;
+              font-size: 11px !important;
+              color: #000 !important;
+            }
+            .print-header-section {
+              display: block !important;
+            }
+            .print-page-block {
+              page-break-inside: avoid !important;
+              page-break-after: always !important;
+              break-after: page !important;
+            }
           }
-          .print-header-section { display: none; }
+          .print-header-section {
+            display: none;
+          }
         `}</style>
 
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 no-print">
@@ -1781,7 +2324,7 @@ service cloud.firestore {
               className="p-2 border border-slate-300 rounded-lg text-sm bg-white" 
             />
 
-            {(currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
+            {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
               <select 
                 value={selectedAtasan} 
                 onChange={e => {
@@ -1797,7 +2340,7 @@ service cloud.firestore {
               </select>
             )}
 
-            {(currentUser?.role === 'admin' || currentUser?.role === 'manager' || currentUser?.role === 'approval') && (
+            {(currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'approval') && (
               <select 
                 value={selectedPegawai} 
                 onChange={e => setSelectedPegawai(e.target.value)} 
@@ -2018,35 +2561,35 @@ service cloud.firestore {
 
     const accessibleAtasan = useMemo(() => {
       const allAtasan = employees.filter(e => e.role === 'approval' || e.role === 'manager' || e.role === 'admin');
-      if (currentUser?.role === 'admin') {
+      if (currentUser.role === 'admin') {
         return allAtasan;
       }
-      if (currentUser?.role === 'manager') {
-        return allAtasan.filter(e => e.atasan === currentUser?.nip);
+      if (currentUser.role === 'manager') {
+        return allAtasan.filter(e => e.atasan === currentUser.nip);
       }
       return [];
     }, [employees, currentUser]);
 
     const accessiblePegawai = useMemo(() => {
-      if (currentUser?.role === 'admin') {
+      if (currentUser.role === 'admin') {
         if (selectedAtasan === 'all') {
           return employees;
         } else {
           return employees.filter(e => e.atasan === selectedAtasan);
         }
       }
-      if (currentUser?.role === 'manager') {
+      if (currentUser.role === 'manager') {
         if (selectedAtasan === 'all') {
           const downlinerAtasanNips = accessibleAtasan.map(a => a.nip);
-          return employees.filter(e => e.atasan === currentUser?.nip || downlinerAtasanNips.includes(e.atasan));
+          return employees.filter(e => e.atasan === currentUser.nip || downlinerAtasanNips.includes(e.atasan));
         } else {
           return employees.filter(e => e.atasan === selectedAtasan);
         }
       }
-      if (currentUser?.role === 'approval') {
-        return employees.filter(e => e.nip === currentUser?.nip || e.atasan === currentUser?.nip);
+      if (currentUser.role === 'approval') {
+        return employees.filter(e => e.nip === currentUser.nip || e.atasan === currentUser.nip);
       }
-      return currentUser ? [currentUser] : [];
+      return [currentUser];
     }, [employees, currentUser, selectedAtasan, accessibleAtasan]);
 
     useEffect(() => {
@@ -2122,7 +2665,7 @@ service cloud.firestore {
           <div className="flex flex-wrap gap-3">
             <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm bg-white" />
             
-            {(currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
+            {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
               <select 
                 value={selectedAtasan} 
                 onChange={e => {
@@ -2138,7 +2681,7 @@ service cloud.firestore {
               </select>
             )}
 
-            {(currentUser?.role === 'admin' || currentUser?.role === 'manager' || currentUser?.role === 'approval') && (
+            {(currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'approval') && (
               <select 
                 value={selectedPegawai} 
                 onChange={e => setSelectedPegawai(e.target.value)} 
@@ -2481,23 +3024,20 @@ service cloud.firestore {
           </div>
         </div>
         <nav className="p-4 space-y-1 flex-1 overflow-y-auto">
-          {navItems.filter(item => item.roles.includes(currentUser?.role)).map(item => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center p-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                  activeTab === item.id 
-                    ? 'bg-blue-600 text-white shadow-md' 
-                    : 'hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                <Icon size={18} className="mr-3" />
-                {item.label}
-              </button>
-            );
-          })}
+          {navItems.filter(item => item.roles.includes(currentUser.role)).map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center p-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                activeTab === item.id 
+                  ? 'bg-blue-600 text-white shadow-md' 
+                  : 'hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <item.icon size={18} className="mr-3" />
+              {item.label}
+            </button>
+          ))}
         </nav>
         <div className="p-4 border-t border-slate-800">
           <button 
@@ -2531,6 +3071,18 @@ service cloud.firestore {
           </div>
           
           <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+            {/* TOMBOL PWA DI HEADER UNTUK DESKTOP / DEVICE LEBAR */}
+            {!isAppInstalled && (deferredPrompt || isIosPromptVisible) && (
+              <button 
+                onClick={handleInstallPwa}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer mr-2"
+                title="Install Aplikasi ini di Perangkat Anda"
+              >
+                {isIosPromptVisible ? <Smartphone size={14} /> : <DownloadCloud size={14} />}
+                Install PWA
+              </button>
+            )}
+
             <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 flex flex-row items-center gap-1.5">
               <span className="font-bold text-slate-800">{currentUser?.name}</span>
               {currentUser?.position && (
@@ -2556,25 +3108,22 @@ service cloud.firestore {
 
       {/* BOTTOM NAVIGATION (Mobile Only) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-between items-center px-1 py-2 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] overflow-x-auto no-print">
-        {navItems.filter(item => item.roles.includes(currentUser?.role)).map(item => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`flex flex-col items-center justify-center p-2 min-w-[60px] flex-1 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
-                activeTab === item.id 
-                  ? 'text-blue-600' 
-                  : 'text-slate-500'
-              }`}
-            >
-              <Icon size={22} className={`mb-1 ${activeTab === item.id ? 'opacity-100' : 'opacity-70'}`} />
-              <span className="truncate w-full text-center leading-tight">
-                {item.label.split(' ')[0]}
-              </span>
-            </button>
-          );
-        })}
+        {navItems.filter(item => item.roles.includes(currentUser.role)).map(item => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            className={`flex flex-col items-center justify-center p-2 min-w-[60px] flex-1 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
+              activeTab === item.id 
+                ? 'text-blue-600' 
+                : 'text-slate-500'
+            }`}
+          >
+            <item.icon size={22} className={`mb-1 ${activeTab === item.id ? 'opacity-100' : 'opacity-70'}`} />
+            <span className="truncate w-full text-center leading-tight">
+              {item.label.split(' ')[0]}
+            </span>
+          </button>
+        ))}
         <button
           onClick={handleLogout}
           className="flex flex-col items-center justify-center p-2 min-w-[60px] flex-1 rounded-lg text-[10px] font-medium text-red-500 cursor-pointer"
