@@ -37,15 +37,25 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 
+// --- SAFE ENVIRONMENT VARIABLE GETTER ---
+const getEnv = (key) => {
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env[key]) {
+      return process.env[key];
+    }
+  } catch (e) {}
+  return "";
+};
+
 // --- INITIALIZE FIREBASE SYSTEM (Production Environment Config) ---
-// Membaca dari Vercel Environment Variables secara aman menggunakan format Vite standar
+// Membaca dari Vercel Environment Variables secara aman tanpa menggunakan import.meta
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || (typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_API_KEY : ""),
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || (typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_AUTH_DOMAIN : ""),
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || (typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_PROJECT_ID : ""),
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || (typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_STORAGE_BUCKET : ""),
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || (typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_MESSAGING_SENDER_ID : ""),
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || (typeof process !== 'undefined' && process.env ? process.env.VITE_FIREBASE_APP_ID : "")
+  apiKey: getEnv('VITE_FIREBASE_API_KEY') || "AIzaSyCMUqxl3MhFp-TneyOBFohDYmi_XBUXRfs",
+  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN') || "overtime-app-22175.firebaseapp.com",
+  projectId: getEnv('VITE_FIREBASE_PROJECT_ID') || "overtime-app-22175",
+  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET') || "overtime-app-22175.firebasestorage.app",
+  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID') || "661655668561",
+  appId: getEnv('VITE_FIREBASE_APP_ID') || "1:661655668561:web:4e9983976b624de10cb570"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -53,7 +63,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // Sanitasi App ID untuk Firestore
-const rawAppId = import.meta.env.VITE_APP_ID || (typeof process !== 'undefined' && process.env ? process.env.VITE_APP_ID : "btn-mamuju-production");
+const rawAppId = getEnv('VITE_APP_ID') || "btn-mamuju-production";
 const appId = String(rawAppId).replace(/\//g, '_');
 
 // --- EXPONENTIAL BACKOFF RETRY HELPER FOR FIRESTORE ---
@@ -1419,12 +1429,6 @@ service cloud.firestore {
         <div className="flex bg-white rounded-xl p-1 shadow-xs border border-slate-200 gap-1 no-print">
           <button
             type="button"
-            onClick={() => setActiveTab(activeTab)} // Force re-render if needed
-            className="hidden"
-          ></button>
-          
-          <button
-            type="button"
             onClick={() => setActiveSubTab('limit')}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
               activeSubTab === 'limit'
@@ -2527,12 +2531,13 @@ service cloud.firestore {
           </div>
           
           <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-            <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 flex flex-row items-center">
-              <span className="text-slate-400 font-normal mr-2 hidden sm:inline"></span>
-              <span className="font-semibold text-slate-800 truncate max-w-[150px]">{currentUser?.name}</span>
-              <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full ml-2">
-                {(currentUser?.role || '').toUpperCase()}
-              </span>
+            <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 flex flex-row items-center gap-1.5">
+              <span className="font-bold text-slate-800">{currentUser?.name}</span>
+              {currentUser?.position && (
+                <span className="text-slate-500 text-xs font-normal">
+                  — {currentUser.position}
+                </span>
+              )}
             </div>
           </div>
         </header>
