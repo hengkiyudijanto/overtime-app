@@ -1575,7 +1575,39 @@ export default function App() {
 
     return (
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 print-full-width">
-        <style>{`@media print { aside, header, nav, .no-print, button, select, input { display: none !important; } body, .main-content { background: white !important; color: black !important; padding: 0 !important; margin: 0 !important; } .print-full-width { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; padding: 0 !important; } .print-table { border: 1.5px solid #000 !important; border-collapse: collapse !important; width: 100% !important; } .print-table th, .print-table td { border: 1px solid #000 !important; padding: 8px 10px !important; font-size: 11px !important; color: #000 !important; } .print-header-section { display: block !important; } .print-page-block { display: block; width: 100%; } tr, .avoid-break { page-break-inside: avoid !important; break-inside: avoid !important; } } .print-header-section { display: none; }`}</style>
+        <style>{`
+          .a4-sheet {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 15mm 20mm;
+            margin: 0 auto 20px auto;
+            background: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            box-sizing: border-box;
+            color: black;
+          }
+          @media print {
+            @page { margin: 0; size: A4 portrait; }
+            body, html { margin: 0 !important; padding: 0 !important; background: white !important; }
+            aside, header, nav, .no-print, button, select, input { display: none !important; }
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .a4-sheet {
+              margin: 0 !important;
+              box-shadow: none !important;
+              border: none !important;
+              page-break-after: always;
+              break-after: page;
+            }
+            .a4-sheet:last-child {
+              page-break-after: auto;
+              break-after: auto;
+            }
+            tr, .avoid-break { page-break-inside: avoid !important; break-inside: avoid !important; }
+          }
+        `}</style>
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 no-print">
           <h2 className="text-lg font-semibold text-slate-800">Laporan Lembur</h2>
           <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full xl:w-auto">
@@ -1624,14 +1656,17 @@ export default function App() {
           </div>
         )}
         {isPrintMode && (
-          <div className="fixed inset-0 bg-white z-[999] overflow-y-auto p-8 flex flex-col animate-in fade-in duration-200">
-            <div className="flex flex-col sm:flex-row justify-between items-center bg-slate-900 text-white p-4 rounded-xl mb-8 gap-4 shadow-lg no-print"><div className="flex items-center gap-3"><AlertCircle className="text-yellow-400" size={24} /><div className="text-left"><p className="font-semibold text-sm">Modus Pratinjau Cetak Aktif</p><p className="text-xs text-slate-400">Tekan pintasan keyboard Ctrl+P (atau Cmd+P) jika dialog cetak terblokir.</p></div></div><div className="flex gap-2 w-full sm:w-auto"><button onClick={() => { try { window.print(); } catch(e) {} }} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"><Printer size={14} /> Cetak (Ctrl+P / Cmd+P)</button><button onClick={() => setIsPrintMode(false)} className="flex-1 sm:flex-none bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer">Kembali ke Aplikasi</button></div></div>
-            <div id="print-content-area" className="max-w-4xl mx-auto w-full bg-white p-8 border border-slate-300 shadow-md rounded-sm text-black flex-1 text-left">
+          <div className="fixed inset-0 bg-slate-800 z-[999] overflow-y-auto p-4 sm:p-8 flex flex-col animate-in fade-in duration-200">
+            <div className="flex flex-col sm:flex-row justify-between items-center bg-slate-900 border border-slate-700 text-white p-4 rounded-xl mb-8 gap-4 shadow-lg no-print max-w-[210mm] mx-auto w-full sticky top-4 z-50">
+              <div className="flex items-center gap-3"><AlertCircle className="text-yellow-400" size={24} /><div className="text-left"><p className="font-semibold text-sm">Modus Pratinjau Cetak Aktif</p><p className="text-xs text-slate-400">Tekan pintasan keyboard Ctrl+P (atau Cmd+P) jika dialog cetak terblokir.</p></div></div>
+              <div className="flex gap-2 w-full sm:w-auto"><button onClick={() => { try { window.print(); } catch(e) {} }} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"><Printer size={14} /> Cetak</button><button onClick={() => setIsPrintMode(false)} className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer">Tutup</button></div>
+            </div>
+            <div id="print-content-area" className="w-full flex flex-col items-center">
               {groupedData.map((group, index) => {
                 const approvedTotal = group.requests.filter(r => r.status === 'Approved' || r.status === 'Registered').reduce((sum, r) => sum + r.duration, 0);
                 const rejectTotal = group.requests.filter(r => r.status === 'Reject' || r.status === 'Rejected').reduce((sum, r) => sum + r.duration, 0);
                 return (
-                  <div key={group.nip} style={{ pageBreakAfter: index === groupedData.length - 1 ? 'auto' : 'always', breakAfter: index === groupedData.length - 1 ? 'auto' : 'page' }} className={`print-page-block font-sans ${index > 0 ? 'mt-12 pt-12 border-t border-dashed border-slate-300 print:border-none print:mt-0 print:pt-0' : ''}`}>
+                  <div key={group.nip} className="a4-sheet font-sans">
                     <div className="font-sans text-black mb-6 avoid-break"><div className="font-bold text-xs tracking-wide">PT. BANK TABUNGAN NEGARA (PERSERO) TBK</div><div className="font-bold text-xs tracking-wide">KANTOR CABANG MAMUJU</div><div className="my-5"></div><div className="font-bold text-sm tracking-wide">LAPORAN RINCIAN LEMBUR</div><div className="font-bold text-xs">BULAN : {getFormattedMonthYear(selectedMonth)}</div><div className="mt-4 text-xs space-y-1.5 font-sans"><div className="flex"><span className="w-16 font-bold">NAMA</span><span className="font-semibold uppercase">: {group.name}</span></div><div className="flex"><span className="w-16 font-bold">NIP</span><span className="font-semibold uppercase">: {group.nip}</span></div></div></div>
                     <table className="w-full text-left border-collapse border border-black text-xs mb-8">
                       <thead className="avoid-break"><tr className="bg-slate-100 border-b border-black font-semibold text-black"><th className="p-2 border border-black text-center">Tanggal</th><th className="p-2 border border-black text-center">Waktu Kerja</th><th className="p-2 border border-black text-center">Durasi</th><th className="p-2 border border-black text-center">Alasan Lembur</th><th className="p-2 border border-black text-center">Status</th></tr></thead>
