@@ -1574,7 +1574,7 @@ export default function App() {
     };
 
     return (
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 print-full-width">
+      <div id="laporan-view-container" className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 print-full-width">
         <style>{`
           .a4-sheet {
             width: 210mm;
@@ -1588,56 +1588,61 @@ export default function App() {
           }
           @media print {
             @page { margin: 0; size: A4 portrait; }
-            html, body, #root {
+            
+            /* --- RESET LAYOUT AGAR TIDAK TERPOTONG --- */
+            html, body, #root, #app-container, main, #app-content-area, #laporan-view-container {
+              display: block !important;
+              position: static !important;
+              width: 100% !important;
               height: auto !important;
               min-height: 0 !important;
               overflow: visible !important;
               background: white !important;
               margin: 0 !important;
               padding: 0 !important;
+              border: none !important;
+              box-shadow: none !important;
             }
+
             aside, header, nav, .no-print, button, select, input { display: none !important; }
+            
             * {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
             
-            /* --- MEMATIKAN SIFAT FLEX AGAR PAGE-BREAK BERFUNGSI --- */
-            .min-h-screen, .h-screen, .h-full, .flex-1 { 
-              display: block !important; 
-              height: auto !important; 
-              min-height: 0 !important; 
-              overflow: visible !important; 
-            }
-            
+            /* --- NETRALKAN MODAL BACKGROUND & SCROLL --- */
             .print-modal-wrapper {
-              position: absolute !important;
-              top: 0 !important;
-              left: 0 !important;
-              width: 100% !important;
-              overflow: visible !important;
+              position: static !important;
               display: block !important;
-              padding: 0 !important;
+              overflow: visible !important;
               background: white !important;
+              padding: 0 !important;
+              margin: 0 !important;
             }
+
             #print-content-area {
               display: block !important;
+              width: 100% !important;
+              margin: 0 !important;
+              padding: 0 !important;
             }
 
             .a4-sheet {
-              width: 100% !important;
-              max-width: 100% !important;
+              width: 210mm !important;
+              min-height: 297mm !important;
               height: auto !important;
-              min-height: 0 !important;
               margin: 0 !important;
               padding: 15mm 20mm !important;
               box-shadow: none !important;
               border: none !important;
-            }
-            
-            .force-page-break {
               page-break-after: always !important;
               break-after: page !important;
+            }
+
+            .a4-sheet:last-child {
+              page-break-after: auto !important;
+              break-after: auto !important;
             }
 
             tr, .avoid-break { page-break-inside: avoid !important; break-inside: avoid !important; }
@@ -1897,7 +1902,7 @@ export default function App() {
 
   // --- RENDER CONTAINER UTAMA ---
   return (
-    <div className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row pb-16 md:pb-0 relative animate-in fade-in duration-200">
+    <div id="app-container" className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row pb-16 md:pb-0 relative animate-in fade-in duration-200">
       {whatsappToast.show && (
         <div className="fixed top-4 right-4 z-[999] max-w-sm w-full bg-slate-800 text-white p-4 rounded-xl shadow-2xl border-l-4 border-green-500 flex items-start gap-3 animate-in slide-in-from-top-4 duration-300 no-print">
           <div className="p-2 bg-green-900 rounded-lg text-green-400"><MessageSquare size={20} /></div>
@@ -1957,7 +1962,7 @@ export default function App() {
         </header>
 
         {/* CONTENT VIEW AREA */}
-        <div className="p-4 md:p-6 flex-1 overflow-y-auto">
+        <div id="app-content-area" className="p-4 md:p-6 flex-1 overflow-y-auto">
           {activeTab === 'pengajuan' && <PengajuanView />}
           {activeTab === 'approval' && <ApprovalView />}
           {activeTab === 'pegawai' && <PegawaiView />}
