@@ -1588,19 +1588,33 @@ export default function App() {
           }
           @media print {
             @page { margin: 0; size: A4 portrait; }
-            body, html { margin: 0 !important; padding: 0 !important; background: white !important; }
+            html, body, #root {
+              height: auto !important;
+              min-height: 0 !important;
+              overflow: visible !important;
+              background: white !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
             aside, header, nav, .no-print, button, select, input { display: none !important; }
             * {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
             
-            /* --- RESET LAYOUT AGAR TIDAK TERPOTONG 1 HALAMAN --- */
-            .overflow-y-auto, .overflow-auto, .overflow-hidden { overflow: visible !important; }
-            .min-h-screen, .h-screen, .h-full { min-height: 0 !important; height: auto !important; }
+            /* --- MEMATIKAN SIFAT FLEX AGAR PAGE-BREAK BERFUNGSI --- */
+            .min-h-screen, .h-screen, .h-full, .flex-1 { 
+              display: block !important; 
+              height: auto !important; 
+              min-height: 0 !important; 
+              overflow: visible !important; 
+            }
             
             .print-modal-wrapper {
-              position: static !important;
+              position: absolute !important;
+              top: 0 !important;
+              left: 0 !important;
+              width: 100% !important;
               overflow: visible !important;
               display: block !important;
               padding: 0 !important;
@@ -1619,13 +1633,13 @@ export default function App() {
               padding: 15mm 20mm !important;
               box-shadow: none !important;
               border: none !important;
-              page-break-after: always;
-              break-after: page;
             }
-            .a4-sheet:last-child {
-              page-break-after: auto;
-              break-after: auto;
+            
+            .force-page-break {
+              page-break-after: always !important;
+              break-after: page !important;
             }
+
             tr, .avoid-break { page-break-inside: avoid !important; break-inside: avoid !important; }
           }
         `}</style>
@@ -1682,12 +1696,12 @@ export default function App() {
               <div className="flex items-center gap-3"><AlertCircle className="text-yellow-400" size={24} /><div className="text-left"><p className="font-semibold text-sm">Modus Pratinjau Cetak Aktif</p><p className="text-xs text-slate-400">Tekan pintasan keyboard Ctrl+P (atau Cmd+P) jika dialog cetak terblokir.</p></div></div>
               <div className="flex gap-2 w-full sm:w-auto"><button onClick={() => { try { window.print(); } catch(e) {} }} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"><Printer size={14} /> Cetak</button><button onClick={() => setIsPrintMode(false)} className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer">Tutup</button></div>
             </div>
-            <div id="print-content-area" className="w-full flex flex-col items-center">
+            <div id="print-content-area" className="w-full flex flex-col items-center print:block">
               {groupedData.map((group, index) => {
                 const approvedTotal = group.requests.filter(r => r.status === 'Approved' || r.status === 'Registered').reduce((sum, r) => sum + r.duration, 0);
                 const rejectTotal = group.requests.filter(r => r.status === 'Reject' || r.status === 'Rejected').reduce((sum, r) => sum + r.duration, 0);
                 return (
-                  <div key={group.nip} className="a4-sheet font-sans">
+                  <div key={group.nip} className={`a4-sheet font-sans ${index < groupedData.length - 1 ? 'force-page-break' : ''}`}>
                     <div className="font-sans text-black mb-6 avoid-break"><div className="font-bold text-xs tracking-wide">PT. BANK TABUNGAN NEGARA (PERSERO) TBK</div><div className="font-bold text-xs tracking-wide">KANTOR CABANG MAMUJU</div><div className="my-5"></div><div className="font-bold text-sm tracking-wide">LAPORAN RINCIAN LEMBUR</div><div className="font-bold text-xs">BULAN : {getFormattedMonthYear(selectedMonth)}</div><div className="mt-4 text-xs space-y-1.5 font-sans"><div className="flex"><span className="w-16 font-bold">NAMA</span><span className="font-semibold uppercase">: {group.name}</span></div><div className="flex"><span className="w-16 font-bold">NIP</span><span className="font-semibold uppercase">: {group.nip}</span></div></div></div>
                     <table className="w-full text-left border-collapse border border-black text-xs mb-8">
                       <thead className="avoid-break"><tr className="bg-slate-100 border-b border-black font-semibold text-black"><th className="p-2 border border-black text-center">Tanggal</th><th className="p-2 border border-black text-center">Waktu Kerja</th><th className="p-2 border border-black text-center">Durasi</th><th className="p-2 border border-black text-center">Alasan Lembur</th><th className="p-2 border border-black text-center">Status</th></tr></thead>
