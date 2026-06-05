@@ -485,6 +485,95 @@ export default function App() {
     return phone.slice(0, 4) + '*****' + phone.slice(-3);
   };
 
+  // --- REUSABLE DIALOG COMPONENT ---
+  const dialogComponent = dialog ? (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900 bg-opacity-60 p-4 backdrop-blur-sm no-print">
+      <div className={`bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 w-full ${dialog.type === 'lightbox' || dialog.type === 'verify' ? 'max-w-lg' : 'max-w-sm'}`}>
+        <div className="p-6">
+          {dialog.type === 'lightbox' ? (
+            <div className="flex flex-col items-center">
+              <h3 className="text-lg font-bold text-slate-800 mb-3 self-start">{dialog.title}</h3>
+              <div className="w-full bg-slate-50 border rounded-xl overflow-hidden flex items-center justify-center p-2 mb-4">
+                <img src={dialog.imageUrl} alt="Pratinjau" className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-sm" />
+              </div>
+              <div className="w-full flex justify-end">
+                <button onClick={() => setDialog(null)} className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-5 py-2 rounded-xl text-sm transition-all shadow-md cursor-pointer">
+                  Tutup
+                </button>
+              </div>
+            </div>
+          ) : dialog.type === 'verify' ? (
+            <div className="flex flex-col text-left">
+              <h3 className="text-lg font-bold text-slate-800 mb-3">{dialog.title}</h3>
+              <div className="w-full bg-slate-100 border rounded-xl overflow-hidden flex items-center justify-center p-2 mb-4 max-h-[35vh]">
+                <img src={dialog.request.imageUrl} alt="Foto Bukti Lembur" className="max-h-[32vh] object-contain rounded-lg" />
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-5 text-sm space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Pegawai:</span>
+                  <span className="font-semibold text-slate-800">{getEmployeeName(dialog.request.nip)} ({dialog.request.nip})</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Tanggal:</span>
+                  <span className="font-semibold text-slate-800">{dialog.request.date}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Waktu:</span>
+                  <span className="font-semibold text-slate-800">{dialog.request.startTime} - {dialog.request.endTime}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Durasi:</span>
+                  <span className="font-semibold text-slate-800">{dialog.request.duration.toFixed(1)} Jam</span>
+                </div>
+                <div className="flex flex-col pt-1 border-t border-slate-200 mt-1">
+                  <span className="text-slate-500 font-medium">Alasan Lembur:</span>
+                  <span className="font-medium text-slate-800 mt-0.5">{dialog.request.reason}</span>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setDialog(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer">
+                  Batal
+                </button>
+                <button 
+                  onClick={() => { dialog.onReject(); setDialog(null); }} 
+                  className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <X size={15} /> Reject
+                </button>
+                <button 
+                  onClick={() => { dialog.onApprove(); setDialog(null); }} 
+                  className="px-4 py-2 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Check size={15} /> Approved
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-left">
+              <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center">
+                {dialog.isDanger ? <AlertTriangle className="text-red-500 mr-2" size={20}/> : <AlertCircle className="text-blue-500 mr-2" size={20}/>}
+                {dialog.title}
+              </h3>
+              <p className="text-sm text-slate-600 mb-6 leading-relaxed">{dialog.message}</p>
+              <div className="flex justify-end gap-3">
+                {dialog.type === 'confirm' && (
+                  <button onClick={() => setDialog(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer">
+                    Batal
+                  </button>
+                )}
+                <button onClick={() => {
+                  if (dialog.onConfirm) dialog.onConfirm();
+                  setDialog(null);
+                }} className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors cursor-pointer ${dialog.isDanger ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                  {dialog.type === 'confirm' ? 'Ya, Lanjutkan' : 'Tutup'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   // --- TROUBLESHOOTING UI ---
   if (authOrFirestoreError) {
@@ -623,6 +712,7 @@ service cloud.firestore {
             </div>
           </form>
         </div>
+        {dialogComponent}
       </div>
     );
   }
@@ -934,6 +1024,7 @@ service cloud.firestore {
             </div>
           </div>
         )}
+        {dialogComponent}
       </div>
     );
   }
@@ -3125,94 +3216,7 @@ service cloud.firestore {
       </nav>
 
       {/* POPUP DIALOG CONTEXT (No window.alert/confirm) */}
-      {dialog && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900 bg-opacity-60 p-4 backdrop-blur-sm no-print">
-          <div className={`bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 w-full ${dialog.type === 'lightbox' || dialog.type === 'verify' ? 'max-w-lg' : 'max-w-sm'}`}>
-            <div className="p-6">
-              {dialog.type === 'lightbox' ? (
-                <div className="flex flex-col items-center">
-                  <h3 className="text-lg font-bold text-slate-800 mb-3 self-start">{dialog.title}</h3>
-                  <div className="w-full bg-slate-50 border rounded-xl overflow-hidden flex items-center justify-center p-2 mb-4">
-                    <img src={dialog.imageUrl} alt="Pratinjau" className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-sm" />
-                  </div>
-                  <div className="w-full flex justify-end">
-                    <button onClick={() => setDialog(null)} className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-5 py-2 rounded-xl text-sm transition-all shadow-md cursor-pointer">
-                      Tutup
-                    </button>
-                  </div>
-                </div>
-              ) : dialog.type === 'verify' ? (
-                <div className="flex flex-col text-left">
-                  <h3 className="text-lg font-bold text-slate-800 mb-3">{dialog.title}</h3>
-                  <div className="w-full bg-slate-100 border rounded-xl overflow-hidden flex items-center justify-center p-2 mb-4 max-h-[35vh]">
-                    <img src={dialog.request.imageUrl} alt="Foto Bukti Lembur" className="max-h-[32vh] object-contain rounded-lg" />
-                  </div>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-5 text-sm space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 font-medium">Pegawai:</span>
-                      <span className="font-semibold text-slate-800">{getEmployeeName(dialog.request.nip)} ({dialog.request.nip})</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 font-medium">Tanggal:</span>
-                      <span className="font-semibold text-slate-800">{dialog.request.date}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 font-medium">Waktu:</span>
-                      <span className="font-semibold text-slate-800">{dialog.request.startTime} - {dialog.request.endTime}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 font-medium">Durasi:</span>
-                      <span className="font-semibold text-slate-800">{dialog.request.duration.toFixed(1)} Jam</span>
-                    </div>
-                    <div className="flex flex-col pt-1 border-t border-slate-200 mt-1">
-                      <span className="text-slate-500 font-medium">Alasan Lembur:</span>
-                      <span className="font-medium text-slate-800 mt-0.5">{dialog.request.reason}</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-3">
-                    <button onClick={() => setDialog(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer">
-                      Batal
-                    </button>
-                    <button 
-                      onClick={() => { dialog.onReject(); setDialog(null); }} 
-                      className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
-                    >
-                      <X size={15} /> Reject
-                    </button>
-                    <button 
-                      onClick={() => { dialog.onApprove(); setDialog(null); }} 
-                      className="px-4 py-2 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
-                    >
-                      <Check size={15} /> Approved
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-left">
-                  <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center">
-                    {dialog.isDanger ? <AlertTriangle className="text-red-500 mr-2" size={20}/> : <AlertCircle className="text-blue-500 mr-2" size={20}/>}
-                    {dialog.title}
-                  </h3>
-                  <p className="text-sm text-slate-600 mb-6 leading-relaxed">{dialog.message}</p>
-                  <div className="flex justify-end gap-3">
-                    {dialog.type === 'confirm' && (
-                      <button onClick={() => setDialog(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer">
-                        Batal
-                      </button>
-                    )}
-                    <button onClick={() => {
-                      if (dialog.onConfirm) dialog.onConfirm();
-                      setDialog(null);
-                    }} className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors cursor-pointer ${dialog.isDanger ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                      {dialog.type === 'confirm' ? 'Ya, Lanjutkan' : 'Tutup'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {dialogComponent}
     </div>
   );
 }
