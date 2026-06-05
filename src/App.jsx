@@ -1594,8 +1594,29 @@ export default function App() {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
+            
+            /* --- RESET LAYOUT AGAR TIDAK TERPOTONG 1 HALAMAN --- */
+            .overflow-y-auto, .overflow-auto, .overflow-hidden { overflow: visible !important; }
+            .min-h-screen, .h-screen, .h-full { min-height: 0 !important; height: auto !important; }
+            
+            .print-modal-wrapper {
+              position: static !important;
+              overflow: visible !important;
+              display: block !important;
+              padding: 0 !important;
+              background: white !important;
+            }
+            #print-content-area {
+              display: block !important;
+            }
+
             .a4-sheet {
+              width: 100% !important;
+              max-width: 100% !important;
+              height: auto !important;
+              min-height: 0 !important;
               margin: 0 !important;
+              padding: 15mm 20mm !important;
               box-shadow: none !important;
               border: none !important;
               page-break-after: always;
