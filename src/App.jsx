@@ -1574,7 +1574,7 @@ export default function App() {
     };
 
     return (
-      <div id="laporan-view-container" className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 print-full-width">
+      <div id="laporan-view-container" className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 print:block print:overflow-visible print:border-none print:shadow-none print:p-0">
         <style>{`
           .a4-sheet {
             width: 210mm;
@@ -1588,33 +1588,11 @@ export default function App() {
           }
           @media print {
             @page { margin: 0; size: A4 portrait; }
-            
-            /* --- RESET LAYOUT AGAR TIDAK TERPOTONG (HANCURKAN FLEX & ANIMASI) --- */
-            html, body, #root, #app-container, main, #app-content-area, #laporan-view-container, .print-modal-wrapper, #print-content-area {
-              display: block !important;
-              position: static !important;
-              width: auto !important;
-              height: auto !important;
-              min-height: 0 !important;
-              max-height: none !important;
-              overflow: visible !important;
-              background: white !important;
+            html, body {
               margin: 0 !important;
               padding: 0 !important;
-              border: none !important;
-              box-shadow: none !important;
-              transform: none !important;
-              animation: none !important;
-              transition: none !important;
+              background: white !important;
             }
-
-            aside, header, nav, .no-print, button, select, input { display: none !important; }
-            
-            * {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-
             .a4-sheet {
               width: 100% !important;
               min-height: 0 !important;
@@ -1623,18 +1601,24 @@ export default function App() {
               padding: 15mm 20mm !important;
               box-shadow: none !important;
               border: none !important;
+            }
+            .print-force-break {
               page-break-after: always !important;
               break-after: page !important;
-              display: block !important;
-              position: relative !important;
             }
-
-            .a4-sheet:last-child {
-              page-break-after: auto !important;
-              break-after: auto !important;
+            .print-modal-wrapper, #app-container {
+              animation: none !important;
+              transform: none !important;
+              transition: none !important;
             }
-
-            tr, .avoid-break { page-break-inside: avoid !important; break-inside: avoid !important; }
+            tr, .avoid-break { 
+              page-break-inside: avoid !important; 
+              break-inside: avoid !important; 
+            }
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
           }
         `}</style>
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 no-print">
@@ -1685,17 +1669,17 @@ export default function App() {
           </div>
         )}
         {isPrintMode && (
-          <div className="fixed inset-0 bg-slate-800 z-[999] overflow-y-auto p-4 sm:p-8 flex flex-col animate-in fade-in duration-200">
+          <div className="fixed inset-0 bg-slate-800 z-[999] overflow-y-auto p-4 sm:p-8 flex flex-col animate-in fade-in duration-200 print-modal-wrapper print:static print:inset-auto print:bg-white print:overflow-visible print:p-0 print:block print:h-auto print:min-h-0 print:w-full">
             <div className="flex flex-col sm:flex-row justify-between items-center bg-slate-900 border border-slate-700 text-white p-4 rounded-xl mb-8 gap-4 shadow-lg no-print max-w-[210mm] mx-auto w-full sticky top-4 z-50">
               <div className="flex items-center gap-3"><AlertCircle className="text-yellow-400" size={24} /><div className="text-left"><p className="font-semibold text-sm">Modus Pratinjau Cetak Aktif</p><p className="text-xs text-slate-400">Tekan pintasan keyboard Ctrl+P (atau Cmd+P) jika dialog cetak terblokir.</p></div></div>
               <div className="flex gap-2 w-full sm:w-auto"><button onClick={() => { try { window.print(); } catch(e) {} }} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"><Printer size={14} /> Cetak</button><button onClick={() => setIsPrintMode(false)} className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer">Tutup</button></div>
             </div>
-            <div id="print-content-area" className="w-full flex flex-col items-center print:block">
+            <div id="print-content-area" className="w-full flex flex-col items-center print:block print:w-full print:overflow-visible">
               {groupedData.map((group, index) => {
                 const approvedTotal = group.requests.filter(r => r.status === 'Approved' || r.status === 'Registered').reduce((sum, r) => sum + r.duration, 0);
                 const rejectTotal = group.requests.filter(r => r.status === 'Reject' || r.status === 'Rejected').reduce((sum, r) => sum + r.duration, 0);
                 return (
-                  <div key={group.nip} className={`a4-sheet font-sans ${index < groupedData.length - 1 ? 'force-page-break' : ''}`}>
+                  <div key={group.nip} className={`a4-sheet font-sans print:block ${index < groupedData.length - 1 ? 'print-force-break' : ''}`}>
                     <div className="font-sans text-black mb-6 avoid-break"><div className="font-bold text-xs tracking-wide">PT. BANK TABUNGAN NEGARA (PERSERO) TBK</div><div className="font-bold text-xs tracking-wide">KANTOR CABANG MAMUJU</div><div className="my-5"></div><div className="font-bold text-sm tracking-wide">LAPORAN RINCIAN LEMBUR</div><div className="font-bold text-xs">BULAN : {getFormattedMonthYear(selectedMonth)}</div><div className="mt-4 text-xs space-y-1.5 font-sans"><div className="flex"><span className="w-16 font-bold">NAMA</span><span className="font-semibold uppercase">: {group.name}</span></div><div className="flex"><span className="w-16 font-bold">NIP</span><span className="font-semibold uppercase">: {group.nip}</span></div></div></div>
                     <table className="w-full text-left border-collapse border border-black text-xs mb-8">
                       <thead className="avoid-break"><tr className="bg-slate-100 border-b border-black font-semibold text-black"><th className="p-2 border border-black text-center">Tanggal</th><th className="p-2 border border-black text-center">Waktu Kerja</th><th className="p-2 border border-black text-center">Durasi</th><th className="p-2 border border-black text-center">Alasan Lembur</th><th className="p-2 border border-black text-center">Status</th></tr></thead>
@@ -1891,7 +1875,7 @@ export default function App() {
 
   // --- RENDER CONTAINER UTAMA ---
   return (
-    <div id="app-container" className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row pb-16 md:pb-0 relative animate-in fade-in duration-200">
+    <div id="app-container" className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row pb-16 md:pb-0 relative animate-in fade-in duration-200 print:block print:h-auto print:min-h-0 print:overflow-visible print:bg-white">
       {whatsappToast.show && (
         <div className="fixed top-4 right-4 z-[999] max-w-sm w-full bg-slate-800 text-white p-4 rounded-xl shadow-2xl border-l-4 border-green-500 flex items-start gap-3 animate-in slide-in-from-top-4 duration-300 no-print">
           <div className="p-2 bg-green-900 rounded-lg text-green-400"><MessageSquare size={20} /></div>
@@ -1927,7 +1911,7 @@ export default function App() {
       </aside>
 
       {/* MAIN CONTENT CONTAINER */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 print:block print:overflow-visible print:h-auto print:min-h-0">
         {/* TOP BAR */}
         <header className="bg-white border-b border-slate-200 p-4 px-4 md:px-6 flex flex-col sm:flex-row justify-between items-center shadow-sm z-10 sticky top-0 gap-3 no-print">
           <div className="flex justify-between w-full md:w-auto items-center">
@@ -1951,7 +1935,7 @@ export default function App() {
         </header>
 
         {/* CONTENT VIEW AREA */}
-        <div id="app-content-area" className="p-4 md:p-6 flex-1 overflow-y-auto">
+        <div id="app-content-area" className="p-4 md:p-6 flex-1 overflow-y-auto print:block print:overflow-visible print:h-auto print:min-h-0 print:p-0">
           {activeTab === 'pengajuan' && <PengajuanView />}
           {activeTab === 'approval' && <ApprovalView />}
           {activeTab === 'pegawai' && <PegawaiView />}
