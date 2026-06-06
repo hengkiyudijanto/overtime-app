@@ -122,17 +122,19 @@ export default function App() {
 
   const [whatsappToast, setWhatsappToast] = useState({ show: false, message: '', otp: '' });
   const [dialog, setDialog] = useState(null); 
+  
+  // State PWA
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isIosPromptVisible, setIsIosPromptVisible] = useState(false);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+
+  // State Modal Pratinjau Laporan
   const [isPrintMode, setIsPrintMode] = useState(false);
   const [generating, setGenerating] = useState(false);
   
   // State Dialog Form Review Atasan
   const [reviewComment, setReviewComment] = useState('');
   const [reviewError, setReviewError] = useState('');
-
-  // State PWA
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [isIosPromptVisible, setIsIosPromptVisible] = useState(false);
-  const [isAppInstalled, setIsAppInstalled] = useState(false);
 
   const BTN_LOGO_FALLBACK = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 50'%3E%3Ctext x='5' y='42' font-family='system-ui, -apple-system, sans-serif' font-weight='950' font-size='45' fill='%23006cb7' letter-spacing='-3'%3Ebtn%3C/text%3E%3Cpolygon points='68,14 92,6 88,2 64,10' fill='%23e21a22' /%3E%3C/svg%3E";
 
@@ -1550,7 +1552,124 @@ export default function App() {
       return `${parseInt(month, 10)}/${parseInt(day, 10)}/${year}`;
     };
 
-    const handleTriggerPrint = () => { try { setIsPrintMode(true); setTimeout(() => window.print(), 300); } catch (err) {} };
+    // Fungsi canggih untuk mencetak ke PDF dengan teknik Hidden Iframe Native Print
+    const handlePrintNative = () => {
+      if (filteredRequests.length === 0) {
+        setDialog({ type: 'alert', title: 'Data Kosong', message: 'Tidak ada data lembur pada filter saat ini.' });
+        return;
+      }
+
+      setDialog({ type: 'alert', title: 'Menyiapkan Laporan', message: 'Sedang merakit dokumen untuk dicetak...' });
+
+      // Membangun dokumen HTML Murni yang bebas dari pengaruh Tailwind / CSS Flexbox Aplikasi
+      let html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Laporan Lembur - KC Mamuju</title>
+            <style>
+              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px; color: #000; padding: 0; margin: 0; }
+              .page { padding: 20px; page-break-after: always; box-sizing: border-box; }
+              .page:last-child { page-break-after: auto; }
+              .header { margin-bottom: 20px; font-weight: bold; }
+              .title { font-size: 14px; margin-top: 15px; margin-bottom: 5px; }
+              table.info { margin-bottom: 15px; border-collapse: collapse; }
+              table.info td { padding: 3px 15px 3px 0; border: none; font-size: 12px; }
+              table.data { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+              table.data th, table.data td { border: 1px solid #000; padding: 8px; font-size: 11px; }
+              table.data th { background-color: #f1f5f9; text-align: center; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .text-center { text-align: center; }
+              .font-bold { font-weight: bold; }
+              @media print {
+                @page { margin: 10mm; size: A4 portrait; }
+                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              }
+            </style>
+          </head>
+          <body>
+      `;
+
+      groupedData.forEach(group => {
+        const approvedTotal = group.requests.filter(r => r.status === 'Approved' || r.status === 'Registered').reduce((sum, r) => sum + r.duration, 0);
+        const rejectTotal = group.requests.filter(r => r.status === 'Reject' || r.status === 'Rejected').reduce((sum, r) => sum + r.duration, 0);
+
+        html += `
+          <div class="page">
+            <div class="header">
+              <div>PT. BANK TABUNGAN NEGARA (PERSERO) TBK</div>
+              <div>KANTOR CABANG MAMUJU</div>
+              <div class="title">LAPORAN RINCIAN LEMBUR</div>
+              <div style="font-weight: normal; font-size: 11px;">BULAN : ${getFormattedMonthYear(selectedMonth)}</div>
+            </div>
+            
+            <table class="info">
+              <tr><td class="font-bold">NAMA</td><td>: ${group.name.toUpperCase()}</td></tr>
+              <tr><td class="font-bold">NIP</td><td>: ${group.nip}</td></tr>
+            </table>
+
+            <table class="data">
+              <thead>
+                <tr>
+                  <th style="width: 15%;">Tanggal</th>
+                  <th style="width: 25%;">Waktu Kerja</th>
+                  <th style="width: 15%;">Durasi</th>
+                  <th style="width: 30%;">Alasan Lembur</th>
+                  <th style="width: 15%;">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        group.requests.forEach(req => {
+          html += `
+            <tr>
+              <td class="text-center">${getFormattedDate(req.date)}</td>
+              <td class="text-center">${req.startTime} - ${req.endTime}</td>
+              <td class="text-center font-bold">${req.duration.toFixed(1)} j</td>
+              <td>${req.reason}</td>
+              <td class="text-center">${req.status}</td>
+            </tr>
+          `;
+        });
+
+        html += `
+                <tr>
+                  <td colspan="5" class="font-bold" style="background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    <div style="color: #0284c7;">Approved: ${approvedTotal.toFixed(1)} jam</div>
+                    <div style="color: #ef4444;">Reject: ${rejectTotal.toFixed(1)} jam</div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        `;
+      });
+
+      html += `</body></html>`;
+
+      // Buat Iframe tersembunyi untuk proses cetak native
+      const printFrame = document.createElement('iframe');
+      printFrame.style.position = 'absolute';
+      printFrame.style.top = '-10000px';
+      printFrame.style.width = '100%';
+      printFrame.style.height = '100%';
+      document.body.appendChild(printFrame);
+
+      // Suntik HTML Murni ke dalam Iframe
+      printFrame.contentWindow.document.open();
+      printFrame.contentWindow.document.write(html);
+      printFrame.contentWindow.document.close();
+
+      // Beri waktu sedikit untuk browser me-render Iframe tersembunyi, lalu panggil print dialog
+      setTimeout(() => {
+        setDialog(null);
+        printFrame.contentWindow.focus();
+        printFrame.contentWindow.print();
+        
+        // Hapus iframe setelah pencetakan selesai/dibatalkan untuk membersihkan DOM
+        setTimeout(() => document.body.removeChild(printFrame), 3000);
+      }, 500);
+    };
 
     const handleExportExcel = () => {
       if (!window.XLSX) return setDialog({ type: 'alert', title: 'Sistem Belum Siap', message: 'Library XLSX belum termuat sepenuhnya. Mohon coba sesaat lagi.' });
@@ -1574,7 +1693,7 @@ export default function App() {
     };
 
     return (
-      <div id="laporan-view-container" className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 print:block print:overflow-visible print:border-none print:shadow-none print:p-0">
+      <div id="laporan-view-container" className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 print-full-width">
         <style>{`
           .a4-sheet {
             width: 210mm;
@@ -1585,40 +1704,6 @@ export default function App() {
             box-shadow: 0 4px 10px rgba(0,0,0,0.15);
             box-sizing: border-box;
             color: black;
-          }
-          @media print {
-            @page { margin: 0; size: A4 portrait; }
-            html, body {
-              margin: 0 !important;
-              padding: 0 !important;
-              background: white !important;
-            }
-            .a4-sheet {
-              width: 100% !important;
-              min-height: 0 !important;
-              height: auto !important;
-              margin: 0 !important;
-              padding: 15mm 20mm !important;
-              box-shadow: none !important;
-              border: none !important;
-            }
-            .print-force-break {
-              page-break-after: always !important;
-              break-after: page !important;
-            }
-            .print-modal-wrapper, #app-container {
-              animation: none !important;
-              transform: none !important;
-              transition: none !important;
-            }
-            tr, .avoid-break { 
-              page-break-inside: avoid !important; 
-              break-inside: avoid !important; 
-            }
-            * {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
           }
         `}</style>
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 no-print">
@@ -1633,7 +1718,7 @@ export default function App() {
             )}
             <div className="flex gap-2 w-full sm:w-auto justify-end">
               <button onClick={handleExportExcel} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center shadow-sm justify-center cursor-pointer flex-1 sm:flex-none"><Download size={16} className="mr-2" /> Excel</button>
-              <button onClick={handleTriggerPrint} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center shadow-sm justify-center cursor-pointer flex-1 sm:flex-none"><Printer size={16} className="mr-2" /> Cetak</button>
+              <button onClick={() => setIsPrintMode(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center shadow-sm justify-center cursor-pointer flex-1 sm:flex-none"><Printer size={16} className="mr-2" /> Pratinjau & Cetak</button>
             </div>
           </div>
         </div>
@@ -1668,18 +1753,34 @@ export default function App() {
             })}
           </div>
         )}
+
+        {/* --- MODAL PDF VIEWER TERINTEGRASI --- */}
         {isPrintMode && (
-          <div className="fixed inset-0 bg-slate-800 z-[999] overflow-y-auto p-4 sm:p-8 flex flex-col animate-in fade-in duration-200 print-modal-wrapper print:static print:inset-auto print:bg-white print:overflow-visible print:p-0 print:block print:h-auto print:min-h-0 print:w-full">
-            <div className="flex flex-col sm:flex-row justify-between items-center bg-slate-900 border border-slate-700 text-white p-4 rounded-xl mb-8 gap-4 shadow-lg no-print max-w-[210mm] mx-auto w-full sticky top-4 z-50">
-              <div className="flex items-center gap-3"><AlertCircle className="text-yellow-400" size={24} /><div className="text-left"><p className="font-semibold text-sm">Modus Pratinjau Cetak Aktif</p><p className="text-xs text-slate-400">Tekan pintasan keyboard Ctrl+P (atau Cmd+P) jika dialog cetak terblokir.</p></div></div>
-              <div className="flex gap-2 w-full sm:w-auto"><button onClick={() => { try { window.print(); } catch(e) {} }} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"><Printer size={14} /> Cetak</button><button onClick={() => setIsPrintMode(false)} className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer">Tutup</button></div>
+          <div className="fixed inset-0 bg-slate-800 z-[999] p-4 sm:p-8 flex flex-col animate-in fade-in duration-200 overflow-y-auto">
+            <div className="flex flex-col sm:flex-row justify-between items-center bg-slate-900 border border-slate-700 text-white p-4 rounded-xl mb-6 shadow-lg w-full max-w-[210mm] mx-auto flex-shrink-0 sticky top-4 z-50">
+              <div className="flex items-center gap-3">
+                <FileText className="text-blue-400" size={24} />
+                <div className="text-left">
+                  <p className="font-semibold text-sm">Pratinjau Layout Kertas A4</p>
+                  <p className="text-xs text-slate-400">Pastikan data sesuai, lalu klik tombol Cetak Dokumen di sebelah kanan.</p>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-3 sm:mt-0">
+                <button onClick={handlePrintNative} className="bg-blue-600 hover:bg-blue-700 px-5 py-2.5 rounded-lg text-sm font-bold transition-all cursor-pointer flex items-center gap-2">
+                   <Printer size={16}/> Cetak Dokumen (Native)
+                </button>
+                <button onClick={() => setIsPrintMode(false)} className="bg-slate-700 hover:bg-slate-600 px-5 py-2.5 rounded-lg text-sm font-bold transition-all cursor-pointer flex items-center gap-2">
+                   <X size={16}/> Tutup
+                </button>
+              </div>
             </div>
-            <div id="print-content-area" className="w-full flex flex-col items-center print:block print:w-full print:overflow-visible">
+            
+            <div className="w-full flex flex-col items-center pb-20">
               {groupedData.map((group, index) => {
                 const approvedTotal = group.requests.filter(r => r.status === 'Approved' || r.status === 'Registered').reduce((sum, r) => sum + r.duration, 0);
                 const rejectTotal = group.requests.filter(r => r.status === 'Reject' || r.status === 'Rejected').reduce((sum, r) => sum + r.duration, 0);
                 return (
-                  <div key={group.nip} className={`a4-sheet font-sans print:block ${index < groupedData.length - 1 ? 'print-force-break' : ''}`}>
+                  <div key={group.nip} className="a4-sheet font-sans">
                     <div className="font-sans text-black mb-6 avoid-break"><div className="font-bold text-xs tracking-wide">PT. BANK TABUNGAN NEGARA (PERSERO) TBK</div><div className="font-bold text-xs tracking-wide">KANTOR CABANG MAMUJU</div><div className="my-5"></div><div className="font-bold text-sm tracking-wide">LAPORAN RINCIAN LEMBUR</div><div className="font-bold text-xs">BULAN : {getFormattedMonthYear(selectedMonth)}</div><div className="mt-4 text-xs space-y-1.5 font-sans"><div className="flex"><span className="w-16 font-bold">NAMA</span><span className="font-semibold uppercase">: {group.name}</span></div><div className="flex"><span className="w-16 font-bold">NIP</span><span className="font-semibold uppercase">: {group.nip}</span></div></div></div>
                     <table className="w-full text-left border-collapse border border-black text-xs mb-8">
                       <thead className="avoid-break"><tr className="bg-slate-100 border-b border-black font-semibold text-black"><th className="p-2 border border-black text-center">Tanggal</th><th className="p-2 border border-black text-center">Waktu Kerja</th><th className="p-2 border border-black text-center">Durasi</th><th className="p-2 border border-black text-center">Alasan Lembur</th><th className="p-2 border border-black text-center">Status</th></tr></thead>
@@ -1875,7 +1976,7 @@ export default function App() {
 
   // --- RENDER CONTAINER UTAMA ---
   return (
-    <div id="app-container" className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row pb-16 md:pb-0 relative animate-in fade-in duration-200 print:block print:h-auto print:min-h-0 print:overflow-visible print:bg-white">
+    <div id="app-container" className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row pb-16 md:pb-0 relative animate-in fade-in duration-200">
       {whatsappToast.show && (
         <div className="fixed top-4 right-4 z-[999] max-w-sm w-full bg-slate-800 text-white p-4 rounded-xl shadow-2xl border-l-4 border-green-500 flex items-start gap-3 animate-in slide-in-from-top-4 duration-300 no-print">
           <div className="p-2 bg-green-900 rounded-lg text-green-400"><MessageSquare size={20} /></div>
@@ -1911,7 +2012,7 @@ export default function App() {
       </aside>
 
       {/* MAIN CONTENT CONTAINER */}
-      <main className="flex-1 flex flex-col min-w-0 print:block print:overflow-visible print:h-auto print:min-h-0">
+      <main className="flex-1 flex flex-col min-w-0">
         {/* TOP BAR */}
         <header className="bg-white border-b border-slate-200 p-4 px-4 md:px-6 flex flex-col sm:flex-row justify-between items-center shadow-sm z-10 sticky top-0 gap-3 no-print">
           <div className="flex justify-between w-full md:w-auto items-center">
@@ -1935,7 +2036,7 @@ export default function App() {
         </header>
 
         {/* CONTENT VIEW AREA */}
-        <div id="app-content-area" className="p-4 md:p-6 flex-1 overflow-y-auto print:block print:overflow-visible print:h-auto print:min-h-0 print:p-0">
+        <div id="app-content-area" className="p-4 md:p-6 flex-1 overflow-y-auto">
           {activeTab === 'pengajuan' && <PengajuanView />}
           {activeTab === 'approval' && <ApprovalView />}
           {activeTab === 'pegawai' && <PegawaiView />}
