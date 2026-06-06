@@ -1589,19 +1589,23 @@ export default function App() {
           @media print {
             @page { margin: 0; size: A4 portrait; }
             
-            /* --- RESET LAYOUT AGAR TIDAK TERPOTONG --- */
-            html, body, #root, #app-container, main, #app-content-area, #laporan-view-container {
+            /* --- RESET LAYOUT AGAR TIDAK TERPOTONG (HANCURKAN FLEX & ANIMASI) --- */
+            html, body, #root, #app-container, main, #app-content-area, #laporan-view-container, .print-modal-wrapper, #print-content-area {
               display: block !important;
               position: static !important;
-              width: 100% !important;
+              width: auto !important;
               height: auto !important;
               min-height: 0 !important;
+              max-height: none !important;
               overflow: visible !important;
               background: white !important;
               margin: 0 !important;
               padding: 0 !important;
               border: none !important;
               box-shadow: none !important;
+              transform: none !important;
+              animation: none !important;
+              transition: none !important;
             }
 
             aside, header, nav, .no-print, button, select, input { display: none !important; }
@@ -1610,27 +1614,10 @@ export default function App() {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
-            
-            /* --- NETRALKAN MODAL BACKGROUND & SCROLL --- */
-            .print-modal-wrapper {
-              position: static !important;
-              display: block !important;
-              overflow: visible !important;
-              background: white !important;
-              padding: 0 !important;
-              margin: 0 !important;
-            }
-
-            #print-content-area {
-              display: block !important;
-              width: 100% !important;
-              margin: 0 !important;
-              padding: 0 !important;
-            }
 
             .a4-sheet {
-              width: 210mm !important;
-              min-height: 297mm !important;
+              width: 100% !important;
+              min-height: 0 !important;
               height: auto !important;
               margin: 0 !important;
               padding: 15mm 20mm !important;
@@ -1638,6 +1625,8 @@ export default function App() {
               border: none !important;
               page-break-after: always !important;
               break-after: page !important;
+              display: block !important;
+              position: relative !important;
             }
 
             .a4-sheet:last-child {
