@@ -1339,7 +1339,6 @@ export default function App() {
     const [saved, setSaved] = useState(false);
 
     const [showResetModal, setShowResetModal] = useState(false);
-    const [resetStep, setResetStep] = useState(1); 
     const [resetOtp, setResetOtp] = useState('');
     const [enteredResetOtp, setEnteredResetOtp] = useState('');
     const [resetOtpError, setResetOtpError] = useState('');
@@ -1362,65 +1361,38 @@ export default function App() {
     };
 
     const handleInitResetFlow = () => {
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      setResetOtp(otp);
       setShowResetModal(true);
-      setResetStep(1);
       setEnteredResetOtp('');
       setResetOtpError('');
     };
 
-    const handleSendResetOtp = () => {
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
-      setResetOtp(otp);
-
-      const adminEmp = employees.find(e => e.role === 'admin' && e.noHandphone && e.noHandphone !== '-');
-      const adminPhone = adminEmp ? adminEmp.noHandphone : "081122334455"; 
-
-      let formattedPhone = adminPhone.replace(/[^0-9]/g, '');
-      if (formattedPhone.startsWith('0')) formattedPhone = '62' + formattedPhone.slice(1);
-
-      const templateMsg = `KEAMANAN TINGGI OVERTIME 244 MAMUJU! Kode OTP untuk melakukan RESET seluruh data approval/lembur adalah: ${otp}. Harap jangan berikan kode keamanan ini kepada siapa pun!`;
-      const waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(templateMsg)}`;
-
-      setWhatsappToast({ show: true, message: `Pesan keamanan dikirim ke WhatsApp Admin (${adminPhone}): "${templateMsg}"`, otp: otp });
-      window.open(waUrl, '_blank');
-      setResetStep(2);
-    };
-
-    const handleVerifyResetOtp = (e) => {
+    const handleVerifyResetOtp = async (e) => {
       e.preventDefault();
       setResetOtpError('');
       if (enteredResetOtp === resetOtp) {
-        setShowResetModal(false);
-        setResetStep(1);
-        setEnteredResetOtp('');
-        setDialog({
-          type: 'confirm',
-          title: 'Konfirmasi Penghapusan Final',
-          message: `OTP Berhasil Terverifikasi! Apakah Anda benar-benar yakin ingin menghapus seluruh data pengajuan lembur (${requests.length} data) dari database cloud? Tindakan ini bersifat permanen dan tidak dapat dibatalkan.`,
-          isDanger: true,
-          onConfirm: async () => {
-            setResetLoading(true);
-            try {
-              const batch = writeBatch(db);
-              let count = 0;
-              for (let i = 0; i < requests.length; i++) {
-                const req = requests[i];
-                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'requests', req.id);
-                batch.delete(ref);
-                count++;
-                if (count === 400) { await runWithRetry(() => batch.commit()); count = 0; }
-              }
-              if (count > 0) await runWithRetry(() => batch.commit());
-              setDialog({ type: 'alert', title: 'Data Berhasil Direset', message: 'Semua data pengajuan lembur (approval) telah dibersihkan secara permanen.' });
-            } catch (err) {
-              setDialog({ type: 'alert', title: 'Kesalahan', message: 'Sistem gagal membersihkan data approval.' });
-            } finally {
-              setResetLoading(false);
-            }
+        setResetLoading(true);
+        try {
+          const batch = writeBatch(db);
+          let count = 0;
+          for (let i = 0; i < requests.length; i++) {
+            const req = requests[i];
+            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'requests', req.id);
+            batch.delete(ref);
+            count++;
+            if (count === 400) { await runWithRetry(() => batch.commit()); count = 0; }
           }
-        });
+          if (count > 0) await runWithRetry(() => batch.commit());
+          setShowResetModal(false);
+          setDialog({ type: 'alert', title: 'Data Berhasil Direset', message: 'Semua data pengajuan lembur (approval) telah dibersihkan secara permanen.' });
+        } catch (err) {
+          setDialog({ type: 'alert', title: 'Kesalahan', message: 'Sistem gagal membersihkan data approval.' });
+        } finally {
+          setResetLoading(false);
+        }
       } else {
-        setResetOtpError('Kode OTP salah atau tidak cocok. Periksa pop-up simulasi di pojok kanan atas.');
+        setResetOtpError('Kode konfirmasi salah. Silakan periksa kembali angka yang tertera.');
       }
     };
 
@@ -1457,31 +1429,33 @@ export default function App() {
                   <h3 className="text-base font-bold text-slate-800 flex items-center gap-1.5"><ShieldCheck size={18} className="text-red-500" /> Verifikasi Keamanan Reset</h3>
                   <button onClick={() => setShowResetModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"><X size={18} /></button>
                 </div>
-                {resetStep === 1 && (
-                  <div className="space-y-4 text-left">
-                    <div className="p-3 bg-red-50 border border-red-100 text-red-800 rounded-xl text-xs flex gap-2.5"><AlertTriangle size={24} className="flex-shrink-0 mt-0.5 text-red-500" /><div className="leading-relaxed"><strong className="font-bold">PERINGATAN KERAS!</strong> Anda akan menghapus seluruh data pengajuan lembur yang tersimpan di dalam database cloud. Tindakan ini tidak dapat dibatalkan.</div></div>
-                    <p className="text-xs text-slate-500 leading-relaxed">Sistem akan mengirimkan kode OTP keamanan 6-digit acak ke nomor WhatsApp Admin terdaftar sebelum melanjutkan tindakan kritis ini.</p>
-                    <div className="flex gap-2 pt-2">
-                      <button type="button" onClick={() => setShowResetModal(false)} className="flex-1 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Batal</button>
-                      <button type="button" onClick={handleSendResetOtp} className="flex-1 py-2.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"><MessageSquare size={14} /> Kirim OTP ke WA Admin</button>
+                <form onSubmit={handleVerifyResetOtp} className="space-y-4 text-left">
+                  <div className="p-3 bg-red-50 border border-red-100 text-red-800 rounded-xl text-xs flex gap-2.5">
+                    <AlertTriangle size={24} className="flex-shrink-0 mt-0.5 text-red-500" />
+                    <div className="leading-relaxed">
+                      <strong className="font-bold">PERINGATAN KERAS!</strong> Anda akan menghapus seluruh data pengajuan lembur yang tersimpan di dalam database cloud. Tindakan ini tidak dapat dibatalkan.
                     </div>
                   </div>
-                )}
-                {resetStep === 2 && (
-                  <form onSubmit={handleVerifyResetOtp} className="space-y-4 text-left">
-                    <p className="text-xs text-slate-500 leading-relaxed">Kode OTP Keamanan telah disimulasikan melalui WhatsApp Web. Masukkan kode verifikasi OTP 6-digit angka tersebut di bawah ini untuk mengonfirmasi identitas Anda:</p>
-                    <div className="bg-amber-50 border border-amber-100 text-amber-800 p-2.5 rounded-lg text-[10px] leading-relaxed mb-1"><span className="font-bold">Info Simulasi:</span> Periksa pop-up banner WhatsApp di pojok kanan atas layar Anda untuk melihat kode OTP simulasi secara cepat.</div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider text-center">Masukkan 6 Digit OTP Keamanan</label>
-                      <input type="text" maxLength={6} required inputMode="numeric" pattern="[0-9]*" placeholder="______" value={enteredResetOtp} onChange={e => setEnteredResetOtp(e.target.value.replace(/[^0-9]/g, ''))} className="w-full p-3 border border-slate-300 rounded-xl text-center font-mono text-xl tracking-widest font-bold focus:ring-2 focus:ring-red-500 bg-slate-50" />
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                    <p className="text-xs text-amber-800 font-medium mb-1">Ketik kode berikut untuk konfirmasi:</p>
+                    <div className="text-2xl font-mono font-bold text-amber-900 tracking-widest bg-white border border-amber-200 rounded py-2 select-all">
+                      {resetOtp}
                     </div>
-                    {resetOtpError && <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2 rounded"><AlertCircle size={14} className="mr-1 flex-shrink-0" /> {resetOtpError}</p>}
-                    <div className="flex gap-2 pt-2">
-                      <button type="button" onClick={handleSendResetOtp} className="flex-1 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Kirim Ulang OTP</button>
-                      <button type="submit" className="flex-1 py-2.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-sm cursor-pointer">Verifikasi OTP</button>
-                    </div>
-                  </form>
-                )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider text-center">Masukkan Kode Konfirmasi</label>
+                    <input type="text" maxLength={6} required inputMode="numeric" pattern="[0-9]*" placeholder="______" value={enteredResetOtp} onChange={e => setEnteredResetOtp(e.target.value.replace(/[^0-9]/g, ''))} className="w-full p-3 border border-slate-300 rounded-xl text-center font-mono text-xl tracking-widest font-bold focus:ring-2 focus:ring-red-500 bg-slate-50" />
+                  </div>
+                  {resetOtpError && <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2 rounded"><AlertCircle size={14} className="mr-1 flex-shrink-0" /> {resetOtpError}</p>}
+                  <div className="flex gap-2 pt-2">
+                    <button type="button" onClick={() => setShowResetModal(false)} className="flex-1 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Batal</button>
+                    <button type="submit" disabled={resetLoading} className="flex-1 py-2.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-sm cursor-pointer disabled:opacity-50 flex justify-center items-center gap-2">
+                      {resetLoading ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />} Jalankan Reset
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
