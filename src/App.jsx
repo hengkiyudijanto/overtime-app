@@ -40,12 +40,12 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 
-// --- SAFE GLOBAL PROCESS INJECTION (Mencegah ReferenceError & Peringatan ES2015 Target) ---
+// --- SAFE GLOBAL PROCESS INJECTION (Prevents ReferenceError & Target Warnings) ---
 if (typeof globalThis !== 'undefined' && typeof globalThis.process === 'undefined') {
   globalThis.process = { env: {} };
 }
 
-// Membaca dari Vercel Environment Variables secara aman tanpa menggunakan import.meta
+// Safely access Vercel Environment Variables
 const getEnv = (key) => {
   try {
     if (typeof process !== 'undefined' && process.env && process.env[key]) {
@@ -70,7 +70,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Sanitasi App ID untuk Firestore
+// Sanitize App ID for Firestore
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : (getEnv('VITE_APP_ID') || 'default-app-id');
 const appId = String(rawAppId).replace(/\//g, '_');
 
@@ -99,6 +99,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('pengajuan');
   const [requests, setRequests] = useState([]);
   const [params, setParams] = useState({ maxPerDay: 10, maxPerMonth: 40 });
+
+  // Missing States added for compilation & visual safety
+  const [isPrintMode, setIsPrintMode] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   // State Login & Ganti Password
   const [selectedNip, setSelectedNip] = useState('');
@@ -527,7 +531,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
         <Clock className="animate-spin text-blue-500 mb-4" size={40} />
-        <p className="text-slate-500 font-medium">Menyinkronkan data dengan Cloud Storage...</p>
+        <p className="text-slate-500 font-medium animate-pulse">Menyinkronkan data dengan Cloud Storage...</p>
       </div>
     );
   }
@@ -728,7 +732,7 @@ export default function App() {
         status: 'Pending', 
         atasan: currentUser?.atasan || '',
         imageUrl: formData.imageUrl,
-        approvalComment: '' // Penampung komentar atasan
+        approvalComment: '' 
       };
 
       try {
@@ -759,7 +763,6 @@ export default function App() {
             const reqRef = doc(db, 'artifacts', appId, 'public', 'data', 'requests', requestId);
             const req = requests.find(r => r.id === requestId);
             if (req) {
-              // Reset status back to Pending to be reviewed again, and clear previous comment
               await runWithRetry(() => setDoc(reqRef, { ...req, imageUrl: compressedBase64, status: 'Pending', approvalComment: '' }));
               setDialog({ type: 'alert', title: 'Berhasil', message: 'Bukti revisi berhasil diunggah. Menunggu direview ulang oleh atasan.' });
             }
@@ -825,7 +828,6 @@ export default function App() {
                 <input type="time" required value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm" />
               </div>
 
-              {/* UPLOAD FOTO BUKTI DI AWAL */}
               <div className="md:col-span-2 mt-1">
                 <label className="block text-sm font-medium text-slate-700 mb-2">Unggah Foto Bukti Lembur (Wajib)</label>
                 <input type="file" accept="image/*" required={!formData.imageUrl} onChange={handleImageSelect} className="w-full text-sm text-slate-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all cursor-pointer" />
@@ -882,7 +884,7 @@ export default function App() {
             <h2 className="text-lg font-semibold text-slate-800">Riwayat & Status Lembur</h2>
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <SlidersHorizontal size={14} className="text-slate-400 flex-shrink-0" />
-              <select value={myStatusFilter} onChange={e => setMyStatusFilter(e.target.value)} className="p-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-slate-50 bg-white cursor-pointer w-full sm:w-auto">
+              <select value={myStatusFilter} onChange={e => setMyStatusFilter(e.target.value)} className="p-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-slate-50 cursor-pointer w-full sm:w-auto">
                 <option value="all">Status: Semua</option>
                 <option value="pending">Pending</option>
                 <option value="revisi">Revisi</option>
@@ -918,7 +920,6 @@ export default function App() {
                             {req.status}
                           </span>
                           
-                          {/* Kotak peringatan jika direvisi atau ditolak */}
                           {(req.status === 'Revisi' || req.status === 'Reject' || req.status === 'Rejected') && req.approvalComment && (
                             <div className={`text-[10px] p-1.5 rounded mt-0.5 max-w-[220px] whitespace-normal leading-tight border ${req.status === 'Revisi' ? 'bg-orange-50 text-orange-800 border-orange-200' : 'bg-red-50 text-red-800 border-red-100'}`}>
                               <strong className="font-bold block mb-0.5">Catatan Atasan:</strong> {req.approvalComment}
@@ -930,7 +931,6 @@ export default function App() {
                               <img src={req.imageUrl} alt="Bukti" onClick={() => setDialog({ type: 'lightbox', title: `Bukti Foto Lembur (${req.date})`, imageUrl: req.imageUrl })} className="w-9 h-9 object-cover rounded shadow-sm border border-slate-200 cursor-zoom-in hover:opacity-85 transition-all" />
                             )}
                             
-                            {/* Tombol Upload Ulang jika Revisi */}
                             {req.status === 'Revisi' && (
                               <>
                                 <label htmlFor={`reupload-${req.id}`} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-[10px] font-bold cursor-pointer border border-blue-200 transition-all shadow-sm">
@@ -1261,7 +1261,7 @@ export default function App() {
   };
 
   const ParameterView = () => {
-    const [activeSubTab, setActiveSubTab] = useState('limit'); // 'limit' atau 'reset'
+    const [activeSubTab, setActiveSubTab] = useState('limit'); 
     const [localParams, setLocalParams] = useState(params);
     const [saved, setSaved] = useState(false);
 
@@ -1453,7 +1453,6 @@ export default function App() {
       return `${parseInt(month, 10)}/${parseInt(day, 10)}/${year}`;
     };
 
-    // Fungsi canggih untuk mencetak ke PDF dengan teknik Hidden Iframe Native Print
     const handlePrintNative = () => {
       if (filteredRequests.length === 0) {
         setDialog({ type: 'alert', title: 'Data Kosong', message: 'Tidak ada data lembur pada filter saat ini.' });
@@ -1462,7 +1461,6 @@ export default function App() {
 
       setDialog({ type: 'alert', title: 'Menyiapkan Laporan', message: 'Sedang merakit dokumen untuk dicetak...' });
 
-      // Membangun dokumen HTML Murni yang bebas dari pengaruh Tailwind / CSS Flexbox Aplikasi
       let html = `
         <!DOCTYPE html>
         <html>
@@ -1548,7 +1546,6 @@ export default function App() {
 
       html += `</body></html>`;
 
-      // Buat Iframe tersembunyi untuk proses cetak native
       const printFrame = document.createElement('iframe');
       printFrame.style.position = 'absolute';
       printFrame.style.top = '-10000px';
@@ -1556,18 +1553,15 @@ export default function App() {
       printFrame.style.height = '100%';
       document.body.appendChild(printFrame);
 
-      // Suntik HTML Murni ke dalam Iframe
       printFrame.contentWindow.document.open();
       printFrame.contentWindow.document.write(html);
       printFrame.contentWindow.document.close();
 
-      // Beri waktu sedikit untuk browser me-render Iframe tersembunyi, lalu panggil print dialog
       setTimeout(() => {
         setDialog(null);
         printFrame.contentWindow.focus();
         printFrame.contentWindow.print();
         
-        // Hapus iframe setelah pencetakan selesai/dibatalkan untuk membersihkan DOM
         setTimeout(() => document.body.removeChild(printFrame), 3000);
       }, 500);
     };
@@ -1677,7 +1671,7 @@ export default function App() {
             </div>
             
             <div className="w-full flex flex-col items-center pb-20">
-              {groupedData.map((group, index) => {
+              {groupedData.map((group) => {
                 const approvedTotal = group.requests.filter(r => r.status === 'Approved' || r.status === 'Registered').reduce((sum, r) => sum + r.duration, 0);
                 const rejectTotal = group.requests.filter(r => r.status === 'Reject' || r.status === 'Rejected').reduce((sum, r) => sum + r.duration, 0);
                 return (
