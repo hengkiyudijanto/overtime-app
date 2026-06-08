@@ -612,7 +612,7 @@ export default function App() {
               <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Pilih Akun Petugas</label>
               <select value={selectedNip} onChange={e => { setSelectedNip(e.target.value); setPasswordError(false); }} className="w-full p-3 border border-slate-300 rounded-xl text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 cursor-pointer">
                 {employees.map(emp => (
-                  <option key={emp.nip} value={emp.nip}>{emp.nip} - {emp.name} ({((emp.role) || '').toUpperCase()})</option>
+                  <option key={emp.nip} value={emp.nip}>{emp.name}</option>
                 ))}
               </select>
             </div>
