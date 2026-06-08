@@ -32,7 +32,8 @@ import {
   ChevronLeft,
   ChevronRight,
   DownloadCloud,
-  Smartphone
+  Smartphone,
+  Bell
 } from 'lucide-react';
 
 import { initializeApp } from 'firebase/app';
@@ -112,26 +113,19 @@ export default function App() {
   // Lupa Password
   const [showLupaPassword, setShowLupaPassword] = useState(false);
   const [lupaNip, setLupaNip] = useState('');
-  const [lupaStep, setLupaStep] = useState(1); 
-  const [otpTargetEmployee, setOtpTargetEmployee] = useState(null);
-  const [generatedOtp, setGeneratedOtp] = useState('');
-  const [enteredOtp, setEnteredOtp] = useState('');
-  const [otpError, setOtpError] = useState('');
-  const [lupaPasswordForm, setLupaPasswordForm] = useState({ password: '', confirmPassword: '' });
   const [lupaPasswordError, setLupaPasswordError] = useState('');
 
-  const [whatsappToast, setWhatsappToast] = useState({ show: false, message: '', otp: '' });
   const [dialog, setDialog] = useState(null); 
   
+  // Admin Notifikasi Reset
+  const pendingResets = useMemo(() => employees.filter(e => e.resetRequested), [employees]);
+  const [showResetRequestsModal, setShowResetRequestsModal] = useState(false);
+
   // State PWA
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isIosPromptVisible, setIsIosPromptVisible] = useState(false);
   const [isAppInstalled, setIsAppInstalled] = useState(false);
 
-  // State Modal Pratinjau Laporan
-  const [isPrintMode, setIsPrintMode] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  
   // State Dialog Form Review Atasan
   const [reviewComment, setReviewComment] = useState('');
   const [reviewError, setReviewError] = useState('');
@@ -308,62 +302,40 @@ export default function App() {
     }
   };
 
-  const handleLupaStep1 = (e) => {
+  const handleRequestReset = async (e) => {
     e.preventDefault();
     setLupaPasswordError('');
     const emp = employees.find(e => e.nip === lupaNip);
     if (!emp) return setLupaPasswordError('NIP tidak terdaftar di sistem.');
-    if (!emp.noHandphone || emp.noHandphone === '-') return setLupaPasswordError('Gagal: Akun tidak memiliki nomor WhatsApp terdaftar. Silakan hubungi Administrator.');
-    setOtpTargetEmployee(emp);
-    setLupaStep(2);
-  };
-
-  const handleKirimOtpWhatsApp = () => {
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedOtp(otp);
-    let formattedPhone = otpTargetEmployee.noHandphone.replace(/[^0-9]/g, '');
-    if (formattedPhone.startsWith('0')) formattedPhone = '62' + formattedPhone.slice(1);
-    const templateMsg = `Kode OTP Lupa Password Overtime 244 Mamuju Anda adalah: ${otp}. Harap jangan bagikan kode ini kepada siapa pun.`;
-    const waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(templateMsg)}`;
-    setWhatsappToast({ show: true, message: `Pesan WhatsApp Terkirim ke ${otpTargetEmployee.noHandphone}: "${templateMsg}"`, otp: otp });
-    setDialog({ type: 'alert', title: 'WhatsApp OTP Dikirim', message: `Sistem telah mengirimkan kode OTP ke nomor WhatsApp ${otpTargetEmployee.noHandphone}. Jika tab WhatsApp Web tidak terbuka otomatis, silakan salin kode simulasi yang muncul di notifikasi layar Anda.` });
-    window.open(waUrl, '_blank');
-    setLupaStep(3);
-  };
-
-  const handleLupaStep3 = (e) => {
-    e.preventDefault();
-    setOtpError('');
-    if (enteredOtp === generatedOtp) setLupaStep(4);
-    else setOtpError('Kode OTP salah atau tidak cocok. Silakan periksa notifikasi simulasi Anda.');
-  };
-
-  const handleLupaStep4 = async (e) => {
-    e.preventDefault();
-    setLupaPasswordError('');
-    const pwd = lupaPasswordForm.password;
-    const confirm = lupaPasswordForm.confirmPassword;
-    if (pwd.length < 6) return setLupaPasswordError('Kata sandi minimal berisi 6 digit.');
-    if (!/^\d+$/.test(pwd)) return setLupaPasswordError('Kata sandi wajib hanya terdiri dari angka (0-9).');
-    if (pwd !== confirm) return setLupaPasswordError('Konfirmasi kata sandi tidak cocok.');
 
     try {
-      const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', otpTargetEmployee.nip);
-      const updatedUser = { ...otpTargetEmployee, password: pwd, passwordChanged: true };
-      await runWithRetry(() => setDoc(empRef, updatedUser));
-      localStorage.setItem('last_logged_in_nip', updatedUser.nip);
-      setCurrentUser(updatedUser);
+      const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.nip);
+      await runWithRetry(() => setDoc(empRef, { ...emp, resetRequested: true }));
       setShowLupaPassword(false);
       setLupaNip('');
-      setLupaStep(1);
-      setOtpTargetEmployee(null);
-      setGeneratedOtp('');
-      setEnteredOtp('');
-      setLupaPasswordForm({ password: '', confirmPassword: '' });
-      setActiveTab('pengajuan');
-      setDialog({ type: 'alert', title: 'Verifikasi Berhasil', message: 'Kata sandi akun Anda berhasil direset menggunakan verifikasi WhatsApp.' });
+      setDialog({
+        type: 'alert',
+        title: 'Permintaan Terkirim',
+        message: `Permintaan reset kata sandi untuk NIP ${emp.nip} telah berhasil dikirim ke Administrator. Silakan tunggu Admin menyetujui permintaan Anda.`
+      });
     } catch (err) {
-      setLupaPasswordError('Gagal mereset sandi di database.');
+      setLupaPasswordError('Gagal mengirim permintaan ke server database.');
+    }
+  };
+
+  const handleApproveReset = async (emp) => {
+    try {
+      const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.nip);
+      await runWithRetry(() => setDoc(empRef, { 
+        ...emp, 
+        password: emp.nip, 
+        passwordChanged: false, 
+        resetRequested: false 
+      }));
+      setDialog({ type: 'alert', title: 'Berhasil', message: `Kata sandi untuk ${emp.name} telah direset kembali menjadi default (NIP).` });
+      if (pendingResets.length <= 1) setShowResetRequestsModal(false);
+    } catch (err) {
+      setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal mereset kata sandi pegawai.' });
     }
   };
 
@@ -648,72 +620,27 @@ export default function App() {
           </div>
         </div>
 
-        {/* MODAL RESET PASSWORD (WHATSAPP VERIFICATION) */}
+        {/* MODAL RESET PASSWORD (REQUEST TO ADMIN) */}
         {showLupaPassword && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900 bg-opacity-70 p-4 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-md w-full">
               <div className="p-6">
                 <div className="flex justify-between items-center mb-4 border-b pb-3">
-                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-1.5"><ShieldCheck size={18} className="text-blue-600" /> Lupa Kata Sandi Akun</h3>
-                  <button onClick={() => { setShowLupaPassword(false); setLupaStep(1); setLupaNip(''); }} className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"><X size={18} /></button>
+                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-1.5"><ShieldCheck size={18} className="text-blue-600" /> Permintaan Reset Sandi</h3>
+                  <button onClick={() => { setShowLupaPassword(false); setLupaNip(''); setLupaPasswordError(''); }} className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"><X size={18} /></button>
                 </div>
-                {lupaStep === 1 && (
-                  <form onSubmit={handleLupaStep1} className="space-y-4 text-left">
-                    <p className="text-xs text-slate-500 leading-relaxed">Masukkan NIP pegawai Anda yang valid. Sistem akan mencocokkan NIP serta mengecek ketersediaan nomor WhatsApp untuk proses reset.</p>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Masukkan NIP Anda</label>
-                      <input type="text" required placeholder="Contoh: 6628" value={lupaNip} onChange={e => setLupaNip(e.target.value)} className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-medium" />
-                    </div>
-                    {lupaPasswordError && <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2 rounded"><AlertCircle size={14} className="mr-1 flex-shrink-0" /> {lupaPasswordError}</p>}
-                    <div className="flex justify-end gap-2 pt-2">
-                      <button type="button" onClick={() => setShowLupaPassword(false)} className="px-4 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Batal</button>
-                      <button type="submit" className="px-4 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm cursor-pointer">Lanjutkan</button>
-                    </div>
-                  </form>
-                )}
-                {lupaStep === 2 && otpTargetEmployee && (
-                  <div className="space-y-5 text-left">
-                    <div className="p-3 bg-blue-50 text-blue-800 rounded-xl text-xs flex gap-2"><AlertCircle size={18} className="flex-shrink-0 mt-0.5 text-blue-600" /><div>Sistem mendeteksi NIP tersebut didaftarkan atas nama <strong className="uppercase">{otpTargetEmployee.name}</strong>.</div></div>
-                    <div className="space-y-2">
-                      <p className="text-xs text-slate-500">Kode konfirmasi OTP berupa 6-digit angka akan dikirim ke nomor WhatsApp berikut:</p>
-                      <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-center font-bold text-slate-800 text-lg font-mono tracking-wider">{maskPhoneNumber(otpTargetEmployee.noHandphone)}</div>
-                    </div>
-                    <div className="flex gap-2 pt-2">
-                      <button type="button" onClick={() => setLupaStep(1)} className="flex-1 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Kembali</button>
-                      <button type="button" onClick={handleKirimOtpWhatsApp} className="flex-1 py-2.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"><MessageSquare size={14} /> Kirim OTP ke WA</button>
-                    </div>
+                <form onSubmit={handleRequestReset} className="space-y-4 text-left">
+                  <p className="text-xs text-slate-500 leading-relaxed">Masukkan NIP Anda. Sistem akan mengirimkan notifikasi permintaan reset kata sandi ke Administrator. Jika disetujui, sandi Anda akan dikembalikan ke default (NIP).</p>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Masukkan NIP Anda</label>
+                    <input type="text" required placeholder="Contoh: 6628" value={lupaNip} onChange={e => setLupaNip(e.target.value)} className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-medium" />
                   </div>
-                )}
-                {lupaStep === 3 && otpTargetEmployee && (
-                  <form onSubmit={handleLupaStep3} className="space-y-4 text-left">
-                    <p className="text-xs text-slate-500 leading-relaxed">Kode OTP telah disimulasikan melalui WhatsApp. Harap salin atau masukkan kode verifikasi OTP 6-digit angka tersebut di bawah ini:</p>
-                    <div className="bg-amber-50 border border-amber-100 text-amber-800 p-2.5 rounded-lg text-[10px] leading-relaxed mb-1"><span className="font-bold">Info Simulasi:</span> Periksa pop-up banner WhatsApp di pojok kanan atas layar Anda untuk melihat kode OTP simulasi secara cepat.</div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider text-center">Masukkan 6 Digit OTP</label>
-                      <input type="text" maxLength={6} required inputMode="numeric" pattern="[0-9]*" placeholder="______" value={enteredOtp} onChange={e => setEnteredOtp(e.target.value.replace(/[^0-9]/g, ''))} className="w-full p-3 border border-slate-300 rounded-xl text-center font-mono text-xl tracking-widest font-bold focus:ring-2 focus:ring-blue-500 bg-slate-50" />
-                    </div>
-                    {otpError && <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2 rounded"><AlertCircle size={14} className="mr-1 flex-shrink-0" /> {otpError}</p>}
-                    <div className="flex gap-2 pt-2">
-                      <button type="button" onClick={handleKirimOtpWhatsApp} className="flex-1 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Kirim Ulang OTP</button>
-                      <button type="submit" className="flex-1 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm cursor-pointer">Verifikasi OTP</button>
-                    </div>
-                  </form>
-                )}
-                {lupaStep === 4 && (
-                  <form onSubmit={handleLupaStep4} className="space-y-4 text-left">
-                    <p className="text-xs text-slate-500 leading-relaxed">Kode OTP Berhasil diverifikasi! Silakan tentukan kata sandi baru Anda (Wajib minimal 6 digit berupa angka).</p>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Kata Sandi Baru (Hanya Angka)</label>
-                      <input type="password" required inputMode="numeric" pattern="[0-9]*" placeholder="Buat minimal 6 digit angka" value={lupaPasswordForm.password} onChange={e => setLupaPasswordForm({ ...lupaPasswordForm, password: e.target.value.replace(/[^0-9]/g, '') })} className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-mono tracking-widest text-center" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Konfirmasi Kata Sandi Baru</label>
-                      <input type="password" required inputMode="numeric" pattern="[0-9]*" placeholder="Ketik ulang kata sandi baru" value={lupaPasswordForm.confirmPassword} onChange={e => setLupaPasswordForm({ ...lupaPasswordForm, confirmPassword: e.target.value.replace(/[^0-9]/g, '') })} className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-mono tracking-widest text-center" />
-                    </div>
-                    {lupaPasswordError && <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2.5 rounded-lg"><AlertCircle size={14} className="mr-1.5 flex-shrink-0" /> {lupaPasswordError}</p>}
-                    <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold text-xs transition-all shadow-md shadow-blue-200 flex items-center justify-center cursor-pointer">Simpan & Masuk ke Aplikasi</button>
-                  </form>
-                )}
+                  {lupaPasswordError && <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2 rounded"><AlertCircle size={14} className="mr-1 flex-shrink-0" /> {lupaPasswordError}</p>}
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button type="button" onClick={() => { setShowLupaPassword(false); setLupaNip(''); setLupaPasswordError(''); }} className="px-4 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Batal</button>
+                    <button type="submit" className="px-4 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm cursor-pointer">Kirim Permintaan</button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
@@ -1950,18 +1877,7 @@ export default function App() {
 
   // --- RENDER CONTAINER UTAMA ---
   return (
-    <div id="app-container" className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row pb-16 md:pb-0 relative animate-in fade-in duration-200">
-      {whatsappToast.show && (
-        <div className="fixed top-4 right-4 z-[999] max-w-sm w-full bg-slate-800 text-white p-4 rounded-xl shadow-2xl border-l-4 border-green-500 flex items-start gap-3 animate-in slide-in-from-top-4 duration-300 no-print">
-          <div className="p-2 bg-green-900 rounded-lg text-green-400"><MessageSquare size={20} /></div>
-          <div className="flex-1 text-left">
-            <p className="text-xs font-bold text-green-400 flex justify-between"><span>Simulasi WhatsApp Gateway</span><button onClick={() => setWhatsappToast({ show: false, message: '', otp: '' })} className="text-slate-400 hover:text-white"><X size={12} /></button></p>
-            <p className="text-xs mt-1 text-slate-200 font-medium leading-relaxed">{whatsappToast.message}</p>
-            <div className="mt-2 bg-slate-950 p-1.5 px-3 rounded text-center font-mono text-sm tracking-widest font-bold text-yellow-400">OTP: {whatsappToast.otp}</div>
-          </div>
-        </div>
-      )}
-
+    <div id="app-container" className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row pb-16 md:pb-0 relative animate-in fade-in duration-200 print:block print:h-auto print:min-h-0 print:overflow-visible print:bg-white">
       {/* SIDEBAR (Desktop Only) */}
       <aside className="hidden md:flex flex-col w-64 bg-slate-900 text-slate-300 flex-shrink-0 h-screen sticky top-0 shadow-xl z-20 no-print">
         <div className="p-6 border-b border-slate-800 flex items-center gap-3">
@@ -1986,7 +1902,7 @@ export default function App() {
       </aside>
 
       {/* MAIN CONTENT CONTAINER */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 print:block print:overflow-visible print:h-auto print:min-h-0">
         {/* TOP BAR */}
         <header className="bg-white border-b border-slate-200 p-4 px-4 md:px-6 flex flex-col sm:flex-row justify-between items-center shadow-sm z-10 sticky top-0 gap-3 no-print">
           <div className="flex justify-between w-full md:w-auto items-center">
@@ -2002,6 +1918,14 @@ export default function App() {
                 {isIosPromptVisible ? <Smartphone size={14} /> : <DownloadCloud size={14} />} Install PWA
               </button>
             )}
+            
+            {currentUser?.role === 'admin' && pendingResets.length > 0 && (
+              <button onClick={() => setShowResetRequestsModal(true)} className="relative p-2 text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-full transition-colors cursor-pointer border border-slate-200 shadow-sm" title="Permintaan Reset Sandi">
+                <Bell size={18} />
+                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>
+              </button>
+            )}
+
             <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 flex flex-row items-center gap-1.5">
               <span className="font-bold text-slate-800">{currentUser?.name}</span>
               {currentUser?.position && <span className="text-slate-500 text-xs font-normal hidden sm:inline">— {currentUser.position}</span>}
@@ -2010,7 +1934,7 @@ export default function App() {
         </header>
 
         {/* CONTENT VIEW AREA */}
-        <div id="app-content-area" className="p-4 md:p-6 flex-1 overflow-y-auto">
+        <div id="app-content-area" className="p-4 md:p-6 flex-1 overflow-y-auto print:block print:overflow-visible print:h-auto print:min-h-0 print:p-0">
           {activeTab === 'pengajuan' && <PengajuanView />}
           {activeTab === 'approval' && <ApprovalView />}
           {activeTab === 'pegawai' && <PegawaiView />}
@@ -2037,6 +1961,37 @@ export default function App() {
           <span className="truncate w-full text-center leading-tight">Keluar</span>
         </button>
       </nav>
+
+      {/* MODAL NOTIFIKASI RESET UNTUK ADMIN */}
+      {showResetRequestsModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900 bg-opacity-70 p-4 backdrop-blur-sm no-print">
+          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+             <div className="p-6">
+                <div className="flex justify-between items-center mb-4 border-b pb-3">
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Bell size={20} className="text-red-500"/> Permintaan Reset Sandi</h3>
+                  <button onClick={() => setShowResetRequestsModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                </div>
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                   {pendingResets.length === 0 ? (
+                     <p className="text-sm text-slate-500 text-center py-4">Tidak ada permintaan reset saat ini.</p>
+                   ) : (
+                     pendingResets.map(emp => (
+                        <div key={emp.nip} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
+                           <div className="text-left">
+                             <p className="font-bold text-sm text-slate-800">{emp.name}</p>
+                             <p className="text-xs text-slate-500 font-mono mt-0.5">NIP: {emp.nip}</p>
+                           </div>
+                           <button onClick={() => handleApproveReset(emp)} className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-sm border border-red-200">
+                             Setujui (Reset ke NIP)
+                           </button>
+                        </div>
+                     ))
+                   )}
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
 
       {/* POPUP DIALOG CONTEXT (No window.alert/confirm) */}
       {dialogComponent}
