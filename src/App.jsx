@@ -56,15 +56,10 @@ const getEnv = (key) => {
 
 // --- DATA SIMULASI OFFLINE ---
 const INITIAL_DEMO_EMPLOYEES = [
-  { nip: "19720906", name: "Hengki Yudijanto", position: "DBM Service & Collection", role: "admin", noHandphone: "081122334455", atasan: "", passwordHash: "", passwordChanged: false },
-  { nip: "6628", name: "Andi Saputra", position: "Consumer Loan Staff", role: "maker", noHandphone: "085244556677", atasan: "1234", passwordHash: "", passwordChanged: false },
-  { nip: "1234", name: "Siti Aminah", position: "Head of Consumer Loan", role: "approval", noHandphone: "081299887766", atasan: "19720906", passwordHash: "", passwordChanged: false }
+  { nip: "19720906", name: "Hengki Yudijanto", position: "DBM Service & Collection", role: "admin", noHandphone: "081122334455", atasan: "", passwordHash: "", passwordChanged: false }
 ];
 
-const INITIAL_DEMO_REQUESTS = [
-  { id: "req_1", nip: "6628", date: "2026-06-01", startTime: "17:00", endTime: "19:30", duration: 2.5, reason: "Pemberkasan Kredit FLPP", status: "Approved", atasan: "1234", imageUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23006cb7'/><text x='50%' y='50%' font-size='10' fill='white' dominant-baseline='middle' text-anchor='middle'>BUKTI DOKUMEN</text></svg>" },
-  { id: "req_2", nip: "6628", date: "2026-06-02", startTime: "17:00", endTime: "20:00", duration: 3.0, reason: "Rekonsiliasi Slik OJK", status: "Pending", atasan: "1234", imageUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23e21a22'/><text x='50%' y='50%' font-size='10' fill='white' dominant-baseline='middle' text-anchor='middle'>DOKUMEN SLIK</text></svg>" }
-];
+const INITIAL_DEMO_REQUESTS = [];
 
 // Item navigasi aplikasi didefinisikan secara global
 const navItems = [
