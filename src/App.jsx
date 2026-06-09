@@ -40,7 +40,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 
-// --- SAFE GLOBAL PROCESS INJECTION (Mencegah ReferenceError di Berbagai Browser) ---
+// --- SAFE GLOBAL PROCESS INJECTION ---
 if (typeof globalThis !== 'undefined' && typeof globalThis.process === 'undefined') {
   globalThis.process = { env: {} };
 }
@@ -54,7 +54,7 @@ const getEnv = (key) => {
   return "";
 };
 
-// --- DATA SIMULASI OFFLINE (Sangat berguna untuk pratinjau instan di Canvas) ---
+// --- DATA SIMULASI OFFLINE ---
 const INITIAL_DEMO_EMPLOYEES = [
   { nip: "19720906", name: "Hengki Yudijanto", position: "DBM Service & Collection", role: "admin", noHandphone: "081122334455", atasan: "", passwordHash: "", passwordChanged: false },
   { nip: "6628", name: "Andi Saputra", position: "Consumer Loan Staff", role: "maker", noHandphone: "085244556677", atasan: "1234", passwordHash: "", passwordChanged: false },
@@ -66,7 +66,7 @@ const INITIAL_DEMO_REQUESTS = [
   { id: "req_2", nip: "6628", date: "2026-06-02", startTime: "17:00", endTime: "20:00", duration: 3.0, reason: "Rekonsiliasi Slik OJK", status: "Pending", atasan: "1234", imageUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23e21a22'/><text x='50%' y='50%' font-size='10' fill='white' dominant-baseline='middle' text-anchor='middle'>DOKUMEN SLIK</text></svg>" }
 ];
 
-// Item navigasi aplikasi didefinisikan secara global untuk mencegah scope/hoisting error
+// Item navigasi aplikasi didefinisikan secara global
 const navItems = [
   { id: 'pengajuan', label: 'Pengajuan Lembur', icon: Clock, roles: ['maker', 'approval', 'manager', 'admin'] },
   { id: 'approval', label: 'Approval Lembur', icon: CheckSquare, roles: ['approval', 'manager', 'admin'] },
@@ -92,17 +92,15 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Sanitasi App ID untuk Firestore
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : (getEnv('VITE_APP_ID') || 'default-app-id');
 const appId = String(rawAppId).replace(/\//g, '_');
 
-// --- EXPONENTIAL BACKOFF RETRY HELPER FOR FIRESTORE ---
+// --- EXPONENTIAL BACKOFF RETRY HELPER ---
 const runWithRetry = async (fn) => {
   let delay = 1000;
   for (let i = 0; i < 5; i++) {
-    try {
-      return await fn();
-    } catch (err) {
+    try { return await fn(); } 
+    catch (err) {
       if (i === 4) throw err;
       await new Promise(resolve => setTimeout(resolve, delay));
       delay *= 2;
@@ -110,40 +108,21 @@ const runWithRetry = async (fn) => {
   }
 };
 
-// --- PURE JAVASCRIPT DETERMINISTIC SHA-256 FUNCTION ---
-// Berjalan mulus di sandbox peramban tanpa memicu kebijakan pembatasan kriptografi bawaan
+// --- PURE JAVASCRIPT SHA-256 ---
 const sha256 = (ascii) => {
-  function rightRotate(value, amount) {
-    return (value >>> amount) | (value << (32 - amount));
-  }
-  
-  var mathPow = Math.pow;
-  var maxWord = mathPow(2, 32);
-  var lengthProperty = 'length';
-  var i, j; 
-  var result = '';
-
-  var words = [];
-  var asciiLength = ascii[lengthProperty];
-  var hash = [];
-  var k = [];
-  var primeCounter = 0;
-
+  function rightRotate(value, amount) { return (value >>> amount) | (value << (32 - amount)); }
+  var mathPow = Math.pow; var maxWord = mathPow(2, 32); var lengthProperty = 'length'; var i, j; var result = '';
+  var words = []; var asciiLength = ascii[lengthProperty]; var hash = []; var k = []; var primeCounter = 0;
   var isCandidate = {};
   for (var candidate = 2; primeCounter < 64; candidate++) {
     if (!isCandidate[candidate]) {
-      for (i = candidate; i < 313; i += candidate) {
-        isCandidate[i] = true;
-      }
+      for (i = candidate; i < 313; i += candidate) isCandidate[i] = true;
       hash[primeCounter] = (mathPow(candidate, .5) * maxWord) | 0;
       k[primeCounter++] = (mathPow(candidate, 1/3) * maxWord) | 0;
     }
   }
-  
   ascii += '\x80'; 
-  while (ascii[lengthProperty] % 64 - 56) {
-    ascii += '\x00'; 
-  }
+  while (ascii[lengthProperty] % 64 - 56) ascii += '\x00'; 
   for (i = 0; i < ascii[lengthProperty]; i++) {
     j = ascii.charCodeAt(i);
     if (j >> 8) return; 
@@ -151,38 +130,19 @@ const sha256 = (ascii) => {
   }
   words[words[lengthProperty]] = ((asciiLength * 8) / maxWord) | 0;
   words[words[lengthProperty]] = (asciiLength * 8);
-  
   for (j = 0; j < words[lengthProperty]; j += 16) {
-    var w = words.slice(j, j + 16);
-    var oldHash = hash.slice(0);
-    
+    var w = words.slice(j, j + 16); var oldHash = hash.slice(0);
     for (i = 0; i < 64; i++) {
       var w16 = w[i - 16], w15 = w[i - 15], w7 = w[i - 7], w2 = w[i - 2];
       var a = hash[0], e = hash[4], g = hash[6], h = hash[7];
-      
-      var temp1 = h +
-        (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) + 
-        ((e & hash[5]) ^ (~e & g)) + 
-        k[i] +
-        (w[i] = (i < 16) ? w[i] : (
-          w16 +
-          (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) + 
-          w7 +
-          (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10)) 
-        ) | 0);
-      
-      var temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) + 
-        ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2])); 
-      
+      var temp1 = h + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) + ((e & hash[5]) ^ (~e & g)) + k[i] +
+        (w[i] = (i < 16) ? w[i] : (w16 + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) + w7 + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) | 0);
+      var temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2])); 
       hash = [(temp1 + temp2) | 0].concat(hash);
       hash[4] = (hash[4] + temp1) | 0;
     }
-    
-    for (i = 0; i < 8; i++) {
-      hash[i] = (hash[i] + oldHash[i]) | 0;
-    }
+    for (i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
   }
-  
   for (i = 0; i < 8; i++) {
     for (j = 3; j + 1; j--) {
       var b = (hash[i] >> (j * 8)) & 255;
@@ -197,15 +157,12 @@ const hashPassword = (password, salt) => {
 };
 
 export default function App() {
-  // Mode Deteksi Otomatis: Aktifkan Demo secara default jika konfigurasi Firebase tidak disuntikkan
   const [isDemoMode, setIsDemoMode] = useState(true);
-
   const [user, setUser] = useState({ uid: "demo-user" }); 
   const [isAuthed, setIsAuthed] = useState(true);
   const [loading, setLoading] = useState(false);
   const [authOrFirestoreError, setAuthOrFirestoreError] = useState(null);
   
-  // Database lokal terpadu (Digunakan baik untuk Demo maupun sinkronisasi Firestore)
   const [employees, setEmployees] = useState(INITIAL_DEMO_EMPLOYEES);
   const [requests, setRequests] = useState(INITIAL_DEMO_REQUESTS);
   const [params, setParams] = useState({ maxPerDay: 10, maxPerMonth: 40 });
@@ -213,11 +170,9 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null); 
   const [activeTab, setActiveTab] = useState('pengajuan');
 
-  // State global penting untuk Mode Cetak & Generator Simulasi
   const [isPrintMode, setIsPrintMode] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  // State Login & Ganti Password
   const [selectedNip, setSelectedNip] = useState('');
   const [enteredPassword, setEnteredPassword] = useState('');
   const [passwordError, setPasswordError] = useState(false);
@@ -227,34 +182,58 @@ export default function App() {
   const [newPasswordForm, setNewPasswordForm] = useState({ password: '', confirmPassword: '' });
   const [newPasswordError, setNewPasswordError] = useState('');
 
-  // Lupa Password
   const [showLupaPassword, setShowLupaPassword] = useState(false);
   const [lupaNip, setLupaNip] = useState('');
   const [lupaPasswordError, setLupaPasswordError] = useState('');
 
   const [dialog, setDialog] = useState(null); 
   
-  // Admin Notifikasi Reset
   const pendingResets = useMemo(() => employees.filter(e => e.resetRequested), [employees]);
   const [showResetRequestsModal, setShowResetRequestsModal] = useState(false);
 
-  // State PWA
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isIosPromptVisible, setIsIosPromptVisible] = useState(false);
   const [isAppInstalled, setIsAppInstalled] = useState(false);
 
-  // State Dialog Form Review Atasan
   const [reviewComment, setReviewComment] = useState('');
   const [reviewError, setReviewError] = useState('');
 
   const BTN_LOGO_FALLBACK = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 50'%3E%3Ctext x='5' y='42' font-family='system-ui, -apple-system, sans-serif' font-weight='950' font-size='45' fill='%23006cb7' letter-spacing='-3'%3Ebtn%3C/text%3E%3Cpolygon points='68,14 92,6 88,2 64,10' fill='%23e21a22' /%3E%3C/svg%3E";
+
+  // --- MULTI-CDN ROBUST SCRIPT LOADER ---
+  useEffect(() => {
+    if (!window.XLSX) {
+      const loadScript = (src) => {
+        return new Promise((resolve) => {
+          const script = document.createElement('script');
+          script.src = src; script.async = true;
+          script.onload = () => resolve(true); script.onerror = () => resolve(false);
+          document.body.appendChild(script);
+        });
+      };
+      const initLoad = async () => {
+        let success = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+        if (!success) success = await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+        if (!success) await loadScript('https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js');
+      };
+      initLoad();
+    }
+  }, []);
+
+  useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone || document.referrer.includes('android-app://');
+    setIsAppInstalled(isStandalone);
+    const handleBeforeInstallPrompt = (e) => { e.preventDefault(); setDeferredPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    if (/iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase()) && !isStandalone) setIsIosPromptVisible(true);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
 
   const getEmployeeName = (nip) => {
     const emp = employees.find(e => e.nip === nip);
     return emp ? emp.name : nip;
   };
 
-  // Fungsi keluar akun / logout
   const handleLogout = () => {
     setCurrentUser(null);
     const lastNip = localStorage.getItem('last_logged_in_nip');
@@ -263,15 +242,12 @@ export default function App() {
     setPasswordError(false);
   };
 
-  // 1. KONEKSI & AUTENTIKASI FIREBASE (Jika tersedia)
+  // 1. KONEKSI & AUTENTIKASI FIREBASE
   useEffect(() => {
     let firebaseActive = false;
     try {
       if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-        firebaseActive = true;
-        setIsDemoMode(false);
-        setUser(null);
-        setIsAuthed(false);
+        firebaseActive = true; setIsDemoMode(false); setUser(null); setIsAuthed(false);
       }
     } catch (e) {}
 
@@ -279,27 +255,16 @@ export default function App() {
       setLoading(true);
       const initAuth = async () => {
         try {
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } else {
-            await signInAnonymously(auth);
-          }
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+          else await signInAnonymously(auth);
           setIsAuthed(true);
         } catch (err) {
-          try {
-            await signInAnonymously(auth);
-            setIsAuthed(true);
-          } catch (e) {
-            setAuthOrFirestoreError("auth-failed");
-            setLoading(false);
-          }
+          try { await signInAnonymously(auth); setIsAuthed(true); } 
+          catch (e) { setAuthOrFirestoreError("auth-failed"); setLoading(false); }
         }
       };
       initAuth();
-
-      const unsubscribe = onAuthStateChanged(auth, (u) => {
-        setUser(u);
-      });
+      const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
       return () => unsubscribe();
     }
   }, []);
@@ -308,40 +273,25 @@ export default function App() {
   useEffect(() => {
     if (isDemoMode || !user || !isAuthed) return;
     
-    // Subscribe ke data Pegawai
     const empRef = collection(db, 'artifacts', appId, 'public', 'data', 'employees');
     const unsubEmp = onSnapshot(empRef, (snap) => {
       let emps = snap.docs.map(d => d.data());
-      const isDbEmpty = emps.length === 0 || !emps.some(e => e.role === 'admin');
-      if (isDbEmpty) {
+      if (emps.length === 0 || !emps.some(e => e.role === 'admin')) {
         emps = [{ nip: 'admin', name: 'Administrator (Darurat)', position: 'System Admin', noHandphone: '-', role: 'admin', atasan: '' }, ...emps];
       }
       setEmployees(emps);
       setLoading(false); 
     }, (e) => {
-      console.error("Gagal berlangganan pegawai:", e);
       if (e.code === 'permission-denied') setAuthOrFirestoreError("permission-denied");
       setLoading(false);
     });
 
-    // Subscribe ke data Lembur
     const reqRef = collection(db, 'artifacts', appId, 'public', 'data', 'requests');
-    const unsubReq = onSnapshot(reqRef, (snap) => {
-      setRequests(snap.docs.map(d => d.data()));
-    }, (e) => {
-      console.error("Gagal berlangganan pengajuan:", e);
-    });
-
-    // Subscribe ke data Aturan Parameter
+    const unsubReq = onSnapshot(reqRef, (snap) => setRequests(snap.docs.map(d => d.data())));
     const paramRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'params');
     const unsubParam = onSnapshot(paramRef, (snap) => {
-      if (snap.exists()) {
-        setParams(snap.data());
-      } else {
-        runWithRetry(() => setDoc(paramRef, { maxPerDay: 10, maxPerMonth: 40 }));
-      }
-    }, (e) => {
-      console.error("Gagal berlangganan parameter:", e);
+      if (snap.exists()) setParams(snap.data());
+      else runWithRetry(() => setDoc(paramRef, { maxPerDay: 10, maxPerMonth: 40 }));
     });
 
     return () => { unsubEmp(); unsubReq(); unsubParam(); };
@@ -363,7 +313,6 @@ export default function App() {
     localStorage.setItem('last_logged_in_nip', targetEmp.nip);
 
     const enteredHash = hashPassword(enteredPassword, targetEmp.nip);
-    
     let isValid = false;
     let mustMigrate = false;
 
@@ -386,20 +335,15 @@ export default function App() {
         if (isDemoMode) {
           setEmployees(prev => prev.map(emp => emp.nip === targetEmp.nip ? activeUser : emp));
         } else {
-          try {
-            await runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', targetEmp.nip), activeUser));
-          } catch (err) {}
+          try { await runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', targetEmp.nip), activeUser)); } catch (err) {}
         }
       }
 
       setCurrentUser(activeUser);
 
       const isDefaultPassword = enteredPassword === targetEmp.nip || !targetEmp.passwordChanged;
-      if (isDefaultPassword) {
-        setPendingPasswordChangeUser(activeUser);
-      } else {
-        setActiveTab('pengajuan');
-      }
+      if (isDefaultPassword) setPendingPasswordChangeUser(activeUser);
+      else setActiveTab('pengajuan');
     } else {
       setPasswordError(true);
     }
@@ -417,19 +361,11 @@ export default function App() {
 
     try {
       const hashedPassword = hashPassword(pwd, pendingPasswordChangeUser.nip);
-      const updatedUser = { 
-        ...pendingPasswordChangeUser, 
-        passwordHash: hashedPassword, 
-        passwordChanged: true 
-      };
+      const updatedUser = { ...pendingPasswordChangeUser, passwordHash: hashedPassword, passwordChanged: true };
       delete updatedUser.password;
 
-      if (isDemoMode) {
-        setEmployees(prev => prev.map(emp => emp.nip === pendingPasswordChangeUser.nip ? updatedUser : emp));
-      } else {
-        const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', pendingPasswordChangeUser.nip);
-        await runWithRetry(() => setDoc(empRef, updatedUser));
-      }
+      if (isDemoMode) setEmployees(prev => prev.map(emp => emp.nip === pendingPasswordChangeUser.nip ? updatedUser : emp));
+      else await runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', pendingPasswordChangeUser.nip), updatedUser));
 
       setCurrentUser(updatedUser);
       setPendingPasswordChangeUser(null);
@@ -448,21 +384,30 @@ export default function App() {
     if (!emp) return setLupaPasswordError('NIP tidak terdaftar di sistem.');
 
     try {
-      if (isDemoMode) {
-        setEmployees(prev => prev.map(e => e.nip === emp.nip ? { ...e, resetRequested: true } : e));
-      } else {
-        const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.nip);
-        await runWithRetry(() => setDoc(empRef, { ...emp, resetRequested: true }));
-      }
+      if (isDemoMode) setEmployees(prev => prev.map(e => e.nip === emp.nip ? { ...e, resetRequested: true } : e));
+      else await runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.nip), { ...emp, resetRequested: true }));
+      
       setShowLupaPassword(false);
       setLupaNip('');
-      setDialog({
-        type: 'alert',
-        title: 'Permintaan Terkirim',
-        message: `Permintaan reset kata sandi untuk NIP ${emp.nip} telah berhasil dikirim ke Administrator. Silakan tunggu Admin menyetujui permintaan Anda.`
-      });
+      setDialog({ type: 'alert', title: 'Permintaan Terkirim', message: `Permintaan reset kata sandi untuk NIP ${emp.nip} telah berhasil dikirim ke Administrator.` });
     } catch (err) {
       setLupaPasswordError('Gagal mengirim permintaan ke server database.');
+    }
+  };
+
+  const handleApproveReset = async (emp) => {
+    try {
+      const defaultHash = hashPassword(emp.nip, emp.nip);
+      const updatedUser = { ...emp, passwordHash: defaultHash, passwordChanged: false, resetRequested: false };
+      delete updatedUser.password;
+
+      if (isDemoMode) setEmployees(prev => prev.map(e => e.nip === emp.nip ? updatedUser : e));
+      else await runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.nip), updatedUser));
+      
+      setDialog({ type: 'alert', title: 'Berhasil', message: `Kata sandi untuk ${emp.name} telah direset kembali menjadi default (NIP) dan dienkripsi.` });
+      if (pendingResets.length <= 1) setShowResetRequestsModal(false);
+    } catch (err) {
+      setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal mereset kata sandi pegawai.' });
     }
   };
 
@@ -470,47 +415,30 @@ export default function App() {
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setDeferredPrompt(null);
-        setIsAppInstalled(true);
-      }
+      if (outcome === 'accepted') { setDeferredPrompt(null); setIsAppInstalled(true); }
     } else if (isIosPromptVisible) {
-      setDialog({
-        type: 'alert',
-        title: 'Install di iPhone / iPad',
-        message: 'Untuk memasang aplikasi ini: Ketuk ikon "Bagikan" (Share) di bagian bawah browser Safari Anda, lalu gulir ke bawah dan ketuk "Tambah ke Layar Utama" (Add to Home Screen).'
-      });
+      setDialog({ type: 'alert', title: 'Install di iPhone / iPad', message: 'Untuk memasang aplikasi ini: Ketuk ikon "Bagikan" (Share) di browser Safari, lalu pilih "Tambah ke Layar Utama" (Add to Home Screen).' });
     }
   };
 
-  // Penanganan persetujuan / revisi atasan yang fleksibel (Mendukung Demo & Firestore)
   const handleReviewAction = async (req, action) => {
-    if (action === 'Revisi' && !reviewComment.trim()) {
-      setReviewError('Keterangan revisi wajib diisi untuk memberi tahu maker!');
-      return;
-    }
-    
+    if (action === 'Revisi' && !reviewComment.trim()) return setReviewError('Keterangan revisi wajib diisi untuk memberi tahu maker!');
     setDialog(null);
-    const updatedReq = { 
-      ...req, 
-      status: action,
-      approvalComment: reviewComment.trim()
-    };
+    const updatedReq = { ...req, status: action, approvalComment: reviewComment.trim() };
 
     try {
       if (isDemoMode) {
         setRequests(prev => prev.map(r => r.id === req.id ? updatedReq : r));
-        setDialog({ type: 'alert', title: 'Sukses', message: `Pengajuan lembur berhasil diproses dengan status: ${action}. (Mode Demo)` });
+        setDialog({ type: 'alert', title: 'Sukses', message: `Pengajuan lembur diproses: ${action}. (Mode Demo)` });
       } else {
         await runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'requests', req.id.toString()), updatedReq));
-        setDialog({ type: 'alert', title: 'Sukses', message: `Pengajuan lembur berhasil diproses dengan status: ${action}.` });
+        setDialog({ type: 'alert', title: 'Sukses', message: `Pengajuan lembur diproses: ${action}.` });
       }
     } catch (err) {
       setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal memproses persetujuan di database.' });
     }
   };
 
-  // Konstruksi Modul Dialog Interaktif
   const dialogComponent = dialog ? (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900 bg-opacity-60 p-4 backdrop-blur-sm no-print">
       <div className={`bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 w-full ${dialog.type === 'lightbox' || dialog.type === 'review' ? 'max-w-lg' : 'max-w-sm'}`}>
@@ -522,9 +450,7 @@ export default function App() {
                 <img src={dialog.imageUrl} alt="Pratinjau" className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-sm" />
               </div>
               <div className="w-full flex justify-end">
-                <button onClick={() => setDialog(null)} className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-5 py-2 rounded-xl text-sm transition-all shadow-md cursor-pointer">
-                  Tutup
-                </button>
+                <button onClick={() => setDialog(null)} className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-5 py-2 rounded-xl text-sm transition-all shadow-md cursor-pointer">Tutup</button>
               </div>
             </div>
           ) : dialog.type === 'review' ? (
@@ -534,38 +460,16 @@ export default function App() {
                 <img src={dialog.request.imageUrl} alt="Foto Bukti Lembur" className="max-h-[32vh] object-contain rounded-lg cursor-pointer hover:opacity-90" onClick={() => setDialog({ type: 'lightbox', title: `Pratinjau Bukti Detail`, imageUrl: dialog.request.imageUrl })} />
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4 text-xs space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Pegawai:</span>
-                  <span className="font-semibold text-slate-800">{getEmployeeName(dialog.request.nip)} ({dialog.request.nip})</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Tanggal:</span>
-                  <span className="font-semibold text-slate-800">{dialog.request.date}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Waktu:</span>
-                  <span className="font-semibold text-slate-800">{dialog.request.startTime} - {dialog.request.endTime}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Durasi:</span>
-                  <span className="font-semibold text-slate-800">{dialog.request.duration.toFixed(1)} Jam</span>
-                </div>
+                <div className="flex justify-between"><span className="text-slate-500 font-medium">Pegawai:</span><span className="font-semibold text-slate-800">{getEmployeeName(dialog.request.nip)} ({dialog.request.nip})</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 font-medium">Tanggal:</span><span className="font-semibold text-slate-800">{dialog.request.date}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 font-medium">Waktu:</span><span className="font-semibold text-slate-800">{dialog.request.startTime} - {dialog.request.endTime}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 font-medium">Durasi:</span><span className="font-semibold text-slate-800">{dialog.request.duration.toFixed(1)} Jam</span></div>
               </div>
-              
               <div className="mb-5">
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Catatan / Keterangan Atasan <span className="text-red-500 font-normal ml-1">* Wajib diisi jika pilih Revisi</span>
-                </label>
-                <textarea 
-                  value={reviewComment}
-                  onChange={(e) => { setReviewComment(e.target.value); setReviewError(''); }}
-                  className="w-full p-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 resize-none bg-slate-50"
-                  rows="2"
-                  placeholder="Ketik keterangan revisi, alasan penolakan..."
-                ></textarea>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Catatan / Keterangan Atasan <span className="text-red-500 font-normal ml-1">* Wajib diisi jika pilih Revisi</span></label>
+                <textarea value={reviewComment} onChange={(e) => { setReviewComment(e.target.value); setReviewError(''); }} className="w-full p-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 resize-none bg-slate-50" rows="2" placeholder="Ketik keterangan revisi, alasan penolakan..."></textarea>
                 {reviewError && <p className="text-[11px] text-red-500 mt-1.5 flex items-center font-bold"><AlertCircle size={12} className="mr-1"/> {reviewError}</p>}
               </div>
-
               <div className="flex justify-end gap-2.5">
                 <button onClick={() => setDialog(null)} className="px-3 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer">Batal</button>
                 <button onClick={() => handleReviewAction(dialog.request, 'Reject')} className="px-3 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors shadow-sm cursor-pointer flex items-center gap-1"><X size={14}/> Reject</button>
@@ -581,9 +485,7 @@ export default function App() {
               </h3>
               <p className="text-sm text-slate-600 mb-6 leading-relaxed">{dialog.message}</p>
               <div className="flex justify-end gap-3">
-                {dialog.type === 'confirm' && (
-                  <button onClick={() => setDialog(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer">Batal</button>
-                )}
+                {dialog.type === 'confirm' && <button onClick={() => setDialog(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer">Batal</button>}
                 <button onClick={() => { if (dialog.onConfirm) dialog.onConfirm(); setDialog(null); }} className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors cursor-pointer ${dialog.isDanger ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
                   {dialog.type === 'confirm' ? 'Ya, Lanjutkan' : 'Tutup'}
                 </button>
@@ -600,17 +502,11 @@ export default function App() {
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-slate-100 font-sans" style={{ backgroundColor: '#0b1329' }}>
         <div className="bg-white text-slate-800 rounded-2xl shadow-2xl p-8 max-w-lg w-full border border-slate-200">
           <div className="text-center mb-6">
-            <div className="inline-flex p-3 bg-red-50 rounded-full mb-3 text-red-600">
-              <AlertTriangle size={36} className="animate-bounce" />
-            </div>
+            <div className="inline-flex p-3 bg-red-50 rounded-full mb-3 text-red-600"><AlertTriangle size={36} className="animate-bounce" /></div>
             <h1 className="text-xl font-bold text-slate-800">Koneksi Database Terhambat</h1>
-            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-              Aplikasi mendeteksi adanya kendala hak akses (*Permission Denied*) atau kegagalan autentikasi dengan Firebase.
-            </p>
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">Aplikasi mendeteksi adanya kendala hak akses atau kegagalan autentikasi Firebase.</p>
           </div>
-          <button onClick={() => window.location.reload()} className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold text-sm transition-all shadow-md mt-6 flex items-center justify-center gap-2 cursor-pointer">
-            <Database size={16} /> Coba Hubungkan Kembali
-          </button>
+          <button onClick={() => window.location.reload()} className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold text-sm transition-all shadow-md mt-6 flex items-center justify-center gap-2 cursor-pointer"><Database size={16} /> Coba Hubungkan Kembali</button>
         </div>
       </div>
     );
@@ -620,7 +516,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
         <Clock className="animate-spin text-blue-500 mb-4" size={40} />
-        <p className="text-slate-500 font-medium">Menyinkronkan data dengan Cloud Storage...</p>
+        <p className="text-slate-500 font-medium animate-pulse">Menyinkronkan data dengan Cloud Storage...</p>
       </div>
     );
   }
@@ -630,27 +526,17 @@ export default function App() {
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4" style={{ backgroundColor: '#0b1329' }}>
         <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-100">
           <div className="text-center mb-6">
-            <div className="inline-flex p-3 bg-amber-50 rounded-full mb-3 text-amber-600">
-              <Key size={32} className="animate-bounce" />
-            </div>
+            <div className="inline-flex p-3 bg-amber-50 rounded-full mb-3 text-amber-600"><Key size={32} className="animate-bounce" /></div>
             <h1 className="text-xl font-bold text-slate-800">Wajib Ganti Kata Sandi</h1>
-            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-              Halo <strong>{pendingPasswordChangeUser.name}</strong>, ini adalah login pertama Anda atau Anda masih menggunakan kata sandi default NIP. Silakan buat kata sandi baru Anda terlebih dahulu.
-            </p>
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">Halo <strong>{pendingPasswordChangeUser.name}</strong>, Anda masih menggunakan kata sandi default. Silakan buat kata sandi baru Anda terlebih dahulu.</p>
           </div>
           <form onSubmit={handleSaveForcePassword} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Kata Sandi Baru (Hanya Angka)</label>
-              <input type="password" required inputMode="numeric" pattern="[0-9]*" placeholder="Buat minimal 6 digit angka" value={newPasswordForm.password} onChange={e => setNewPasswordForm({ ...newPasswordForm, password: e.target.value.replace(/[^0-9]/g, '') })} className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-mono tracking-widest text-center" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Konfirmasi Kata Sandi Baru</label>
-              <input type="password" required inputMode="numeric" pattern="[0-9]*" placeholder="Ketik ulang kata sandi baru" value={newPasswordForm.confirmPassword} onChange={e => setNewPasswordForm({ ...newPasswordForm, confirmPassword: e.target.value.replace(/[^0-9]/g, '') })} className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-mono tracking-widest text-center" />
-            </div>
+            <div><label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Kata Sandi Baru (Angka)</label><input type="password" required inputMode="numeric" pattern="[0-9]*" placeholder="Minimal 6 digit angka" value={newPasswordForm.password} onChange={e => setNewPasswordForm({ ...newPasswordForm, password: e.target.value.replace(/[^0-9]/g, '') })} className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-mono text-center" /></div>
+            <div><label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Konfirmasi Kata Sandi</label><input type="password" required inputMode="numeric" pattern="[0-9]*" placeholder="Ketik ulang kata sandi" value={newPasswordForm.confirmPassword} onChange={e => setNewPasswordForm({ ...newPasswordForm, confirmPassword: e.target.value.replace(/[^0-9]/g, '') })} className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-mono text-center" /></div>
             {newPasswordError && <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2.5 rounded-lg"><AlertCircle size={14} className="mr-1.5 flex-shrink-0" /> {newPasswordError}</p>}
             <div className="flex gap-2 pt-2">
               <button type="button" onClick={() => setPendingPasswordChangeUser(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 p-3 rounded-xl font-semibold transition-all text-sm cursor-pointer">Kembali</button>
-              <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold transition-all text-sm shadow-md shadow-blue-200 cursor-pointer">Simpan & Masuk</button>
+              <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold transition-all text-sm shadow-md cursor-pointer">Simpan & Masuk</button>
             </div>
           </form>
         </div>
@@ -663,22 +549,16 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4" style={{ backgroundColor: '#0b1329' }}>
         <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-100 relative animate-in fade-in">
-          
           <div className="text-center mb-8 mt-4">
-            <div className="inline-flex p-3 bg-blue-50 rounded-full mb-4">
-              <img src="Bank_BTN_logo.png" alt="Bank BTN Logo" className="h-12 w-auto object-contain" onError={(e) => { e.target.src = BTN_LOGO_FALLBACK; }} />
-            </div>
+            <div className="inline-flex p-3 bg-blue-50 rounded-full mb-4"><img src="Bank_BTN_logo.png" alt="Bank BTN Logo" className="h-12 w-auto object-contain" onError={(e) => { e.target.src = BTN_LOGO_FALLBACK; }} /></div>
             <h1 className="text-2xl font-bold text-slate-800">Overtime 244</h1>
             <p className="text-sm text-slate-500 mt-1">Kantor Cabang Mamuju</p>
           </div>
-
           <form onSubmit={handleLoginSubmit} className="space-y-5">
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Pilih Akun Petugas</label>
-              <select value={selectedNip} onChange={e => { setSelectedNip(e.target.value); setPasswordError(false); }} className="w-full p-3 border border-slate-300 rounded-xl text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 cursor-pointer">
-                {employees.map(emp => (
-                  <option key={emp.nip} value={emp.nip}>{emp.name}</option>
-                ))}
+              <select value={selectedNip} onChange={e => { setSelectedNip(e.target.value); setPasswordError(false); }} className="w-full p-3 border border-slate-300 rounded-xl text-sm font-medium text-slate-800 bg-slate-50 cursor-pointer">
+                {employees.map(emp => <option key={emp.nip} value={emp.nip}>{emp.name}</option>)}
               </select>
             </div>
             <div>
@@ -687,52 +567,31 @@ export default function App() {
                 <button type="button" onClick={() => setShowLupaPassword(true)} className="text-[10px] text-blue-600 hover:underline font-bold cursor-pointer">Lupa Kata Sandi?</button>
               </div>
               <div className="relative">
-                <input type={showPassword ? "text" : "password"} required placeholder="Password default = NIP" value={enteredPassword} onChange={e => { setEnteredPassword(e.target.value); setPasswordError(false); }} className={`w-full p-3 pl-10 pr-10 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500 ${passwordError ? 'border-red-500 bg-red-50/50 font-sans' : 'border-slate-300 bg-slate-50 font-mono tracking-wide'}`} />
+                <input type={showPassword ? "text" : "password"} required placeholder="Password default = NIP" value={enteredPassword} onChange={e => { setEnteredPassword(e.target.value); setPasswordError(false); }} className={`w-full p-3 pl-10 pr-10 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500 ${passwordError ? 'border-red-500 bg-red-50/50' : 'border-slate-300 bg-slate-50 font-mono tracking-wide'}`} />
                 <Lock size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 cursor-pointer">
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 cursor-pointer">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>
               </div>
               {passwordError && <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center"><AlertCircle size={14} className="mr-1" /> Kata sandi salah! Default: NIP Anda.</p>}
             </div>
-            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold transition-all shadow-md shadow-blue-200 mt-2 flex items-center justify-center cursor-pointer">Masuk ke Aplikasi</button>
+            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold transition-all shadow-md mt-2 flex items-center justify-center cursor-pointer">Masuk ke Aplikasi</button>
           </form>
-
-          {/* TOMBOL INSTALASI PWA EKSKLUSIF */}
           {!isAppInstalled && (deferredPrompt || isIosPromptVisible) && (
             <div className="mt-4 pt-4 border-t border-slate-100">
-              <button onClick={handleInstallPwa} className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white p-3 rounded-xl font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer animate-in fade-in">
-                {isIosPromptVisible ? <Smartphone size={18} /> : <DownloadCloud size={18} />}
-                {isIosPromptVisible ? "Cara Install di Layar Utama" : "Install Aplikasi (PWA)"}
-              </button>
+              <button onClick={handleInstallPwa} className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white p-3 rounded-xl font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer">{isIosPromptVisible ? <Smartphone size={18} /> : <DownloadCloud size={18} />} Install Aplikasi (PWA)</button>
             </div>
           )}
-
-          <div className="mt-6 text-center border-t border-slate-100 pt-5">
-            <p className="text-[11px] text-slate-400 leading-relaxed">Sistem Otomasi Lembur Internal KC Mamuju. Bagi pengguna pertama, masukkan NIP sebagai kata sandi pembuka.</p>
-          </div>
+          <div className="mt-6 text-center border-t border-slate-100 pt-5"><p className="text-[11px] text-slate-400 leading-relaxed">Sistem Otomasi Lembur Internal KC Mamuju.</p></div>
         </div>
-
-        {/* MODAL RESET PASSWORD (REQUEST TO ADMIN) */}
         {showLupaPassword && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900 bg-opacity-70 p-4 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-md w-full">
               <div className="p-6">
-                <div className="flex justify-between items-center mb-4 border-b pb-3">
-                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-1.5"><ShieldCheck size={18} className="text-blue-600" /> Permintaan Reset Sandi</h3>
-                  <button onClick={() => { setShowLupaPassword(false); setLupaNip(''); setLupaPasswordError(''); }} className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"><X size={18} /></button>
-                </div>
+                <div className="flex justify-between items-center mb-4 border-b pb-3"><h3 className="text-base font-bold text-slate-800 flex items-center gap-1.5"><ShieldCheck size={18} className="text-blue-600" /> Permintaan Reset Sandi</h3><button onClick={() => { setShowLupaPassword(false); setLupaNip(''); setLupaPasswordError(''); }} className="text-slate-400 hover:text-slate-600"><X size={18} /></button></div>
                 <form onSubmit={handleRequestReset} className="space-y-4 text-left">
-                  <p className="text-xs text-slate-500 leading-relaxed">Masukkan NIP Anda. Sistem akan mengirimkan notifikasi permintaan reset kata sandi ke Administrator. Jika disetujui, sandi Anda akan dikembalikan ke default (NIP).</p>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">Masukkan NIP Anda</label>
-                    <input type="text" required placeholder="Contoh: 6628" value={lupaNip} onChange={e => setLupaNip(e.target.value)} className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-slate-50 font-medium" />
-                  </div>
-                  {lupaPasswordError && <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2 rounded"><AlertCircle size={14} className="mr-1 flex-shrink-0" /> {lupaPasswordError}</p>}
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button type="button" onClick={() => { setShowLupaPassword(false); setLupaNip(''); setLupaPasswordError(''); }} className="px-4 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Batal</button>
-                    <button type="submit" className="px-4 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm cursor-pointer">Kirim Permintaan</button>
-                  </div>
+                  <p className="text-xs text-slate-500">Kirim permintaan notifikasi ke Admin untuk reset sandi ke default (NIP).</p>
+                  <div><label className="block text-xs font-semibold text-slate-600 mb-1">Masukkan NIP Anda</label><input type="text" required placeholder="Contoh: 6628" value={lupaNip} onChange={e => setLupaNip(e.target.value)} className="w-full p-3 border border-slate-300 rounded-xl text-sm" /></div>
+                  {lupaPasswordError && <p className="text-xs text-red-500 font-medium flex items-center bg-red-50 p-2 rounded"><AlertCircle size={14} className="mr-1" /> {lupaPasswordError}</p>}
+                  <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setShowLupaPassword(false)} className="px-4 py-2.5 text-xs font-semibold bg-slate-100 rounded-xl">Batal</button><button type="submit" className="px-4 py-2.5 text-xs font-semibold text-white bg-blue-600 rounded-xl">Kirim Permintaan</button></div>
                 </form>
               </div>
             </div>
@@ -800,44 +659,23 @@ export default function App() {
 
     const handleSubmit = async (e) => {
       e.preventDefault();
-      setError('');
-      setSuccess('');
+      setError(''); setSuccess('');
       const duration = calculateDuration(formData.startTime, formData.endTime);
-      
       if (duration <= 0) return setError('Waktu mulai harus berbeda dengan waktu selesai.');
       if (!formData.imageUrl) return setError('Foto bukti lembur wajib diunggah.');
-
       const isDuplicateDate = requests.some(r => r.nip === currentUser?.nip && r.date === formData.date && r.status !== 'Reject' && r.status !== 'Rejected');
       if (isDuplicateDate) return setError(`Anda sudah memiliki pengajuan aktif pada tanggal tersebut.`);
       if (duration > params.maxPerDay) return setError(`Durasi melebihi limit harian (${params.maxPerDay} jam).`);
       if (processedHours + pendingHours + duration > params.maxPerMonth) return setError(`Akumulasi bulanan akan melebihi kuota (${params.maxPerMonth} jam).`);
 
       const id = Date.now().toString();
-      const newRequest = { 
-        id, 
-        nip: currentUser.nip, 
-        date: formData.date, 
-        startTime: formData.startTime, 
-        endTime: formData.endTime, 
-        duration, 
-        reason: formData.reason, 
-        status: 'Pending', 
-        atasan: currentUser.atasan || '19720906',
-        imageUrl: formData.imageUrl,
-        approvalComment: ''
-      };
-
+      const newRequest = { id, nip: currentUser.nip, date: formData.date, startTime: formData.startTime, endTime: formData.endTime, duration, reason: formData.reason, status: 'Pending', atasan: currentUser.atasan || '19720906', imageUrl: formData.imageUrl, approvalComment: '' };
       try {
-        if (isDemoMode) {
-          setRequests(prev => [newRequest, ...prev]);
-        } else {
-          await runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'requests', id), newRequest));
-        }
+        if (isDemoMode) setRequests(prev => [newRequest, ...prev]);
+        else await runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'requests', id), newRequest));
         setSuccess('Pengajuan lembur berhasil dikirim.');
         setFormData({ date: '', startTime: '', endTime: '', reason: '', imageUrl: '' });
-      } catch (err) {
-        setError('Gagal menyimpan pengajuan.');
-      }
+      } catch (err) { setError('Gagal menyimpan pengajuan.'); }
     };
 
     const handleCameraReupload = (e, requestId) => {
@@ -850,34 +688,23 @@ export default function App() {
         img.src = event.target.result;
         img.onload = async () => {
           try {
-            const canvas = document.createElement('canvas');
-            canvas.width = 600;
-            canvas.height = img.height * (600 / img.width);
+            const canvas = document.createElement('canvas'); canvas.width = 600; canvas.height = img.height * (600 / img.width);
             canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
             const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-
-            if (isDemoMode) {
-              setRequests(prev => prev.map(r => r.id === requestId ? { ...r, imageUrl: compressedBase64, status: 'Pending', approvalComment: '' } : r));
-            } else {
-              const reqRef = doc(db, 'artifacts', appId, 'public', 'data', 'requests', requestId);
+            if (isDemoMode) setRequests(prev => prev.map(r => r.id === requestId ? { ...r, imageUrl: compressedBase64, status: 'Pending', approvalComment: '' } : r));
+            else {
               const req = requests.find(r => r.id === requestId);
-              if (req) {
-                await runWithRetry(() => setDoc(reqRef, { ...req, imageUrl: compressedBase64, status: 'Pending', approvalComment: '' }));
-              }
+              if (req) await runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'requests', requestId), { ...req, imageUrl: compressedBase64, status: 'Pending', approvalComment: '' }));
             }
-            setDialog({ type: 'alert', title: 'Berhasil', message: 'Bukti revisi berhasil diunggah. Menunggu direview ulang.' });
-          } catch (err) {
-            setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal memproses gambar.' });
-          }
+            setDialog({ type: 'alert', title: 'Berhasil', message: 'Bukti revisi berhasil diunggah.' });
+          } catch (err) { setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal memproses gambar.' }); }
         };
       };
     };
 
     const calendarDays = useMemo(() => {
-      const year = calendarDate.getFullYear();
-      const month = calendarDate.getMonth();
-      const firstDayOfMonth = new Date(year, month, 1).getDay();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const year = calendarDate.getFullYear(); const month = calendarDate.getMonth();
+      const firstDayOfMonth = new Date(year, month, 1).getDay(); const daysInMonth = new Date(year, month + 1, 0).getDate();
       const dayArray = [];
       for (let i = 0; i < (firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1); i++) dayArray.push(null);
       for (let d = 1; d <= daysInMonth; d++) dayArray.push(new Date(year, month, d));
@@ -900,43 +727,27 @@ export default function App() {
             {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg flex items-center text-sm"><AlertCircle size={18} className="mr-2 flex-shrink-0" /> {error}</div>}
             {success && <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-lg flex items-center text-sm"><Check size={18} className="mr-2 flex-shrink-0" /> {success}</div>}
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
-                <input type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Alasan Lembur</label>
-                <input type="text" required placeholder="Contoh: Rekonsiliasi bulanan" value={formData.reason} onChange={e => setFormData({...formData, reason: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm" />
-              </div>
+              <div><label className="block text-sm font-medium text-slate-700 mb-1">Tanggal</label><input type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-sm" /></div>
+              <div><label className="block text-sm font-medium text-slate-700 mb-1">Alasan Lembur</label><input type="text" required placeholder="Contoh: Rekonsiliasi bulanan" value={formData.reason} onChange={e => setFormData({...formData, reason: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm" /></div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Waktu Kerja Mulai</label>
                 <input type="time" required value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm" />
                 <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1.5 text-slate-600 font-medium">
                   <div className="flex justify-between items-center font-sans"><span>Lembur Selesai (Approved):</span><span className="font-semibold text-green-600">{processedHours.toFixed(1)} Jam</span></div>
                   <div className="flex justify-between items-center font-sans"><span>Menunggu Review:</span><span className="font-semibold text-amber-600">{pendingHours.toFixed(1)} Jam</span></div>
-                  <div className="flex justify-between items-center pt-1.5 border-t border-slate-200 font-sans"><span>Sisa Kuota Lembur Bulan Ini:</span><span className={`font-bold ${remainingQuota <= 0 ? 'text-red-600' : 'text-blue-600'}`}>{Math.max(0, remainingQuota).toFixed(1)} Jam</span></div>
+                  <div className="flex justify-between items-center pt-1.5 border-t border-slate-200 font-sans"><span>Sisa Kuota Lembur:</span><span className={`font-bold ${remainingQuota <= 0 ? 'text-red-600' : 'text-blue-600'}`}>{Math.max(0, remainingQuota).toFixed(1)} Jam</span></div>
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Waktu Selesai</label>
-                <input type="time" required value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm" />
-              </div>
-
+              <div><label className="block text-sm font-medium text-slate-700 mb-1">Waktu Selesai</label><input type="time" required value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm" /></div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-slate-700 mb-2">Unggah Foto Bukti Lembur (Wajib)</label>
                 <input type="file" accept="image/*" required={!formData.imageUrl} onChange={handleImageSelect} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 cursor-pointer" />
                 {imageProcessing && <p className="text-xs text-blue-500 mt-2 flex items-center"><Loader2 size={12} className="animate-spin mr-1.5"/> Memproses gambar...</p>}
                 {formData.imageUrl && (
-                  <div className="mt-3 relative inline-block">
-                    <img src={formData.imageUrl} className="h-28 rounded-lg border object-cover shadow-sm" alt="Preview Bukti" />
-                    <button type="button" onClick={() => setFormData({...formData, imageUrl: ''})} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600"><X size={12} /></button>
-                  </div>
+                  <div className="mt-3 relative inline-block"><img src={formData.imageUrl} className="h-28 rounded-lg border object-cover shadow-sm" alt="Preview Bukti" /><button type="button" onClick={() => setFormData({...formData, imageUrl: ''})} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600"><X size={12} /></button></div>
                 )}
               </div>
-
-              <div className="md:col-span-2 flex justify-end">
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold text-sm shadow-sm flex items-center gap-1.5 cursor-pointer"><Plus size={16} /> Kirim Pengajuan</button>
-              </div>
+              <div className="md:col-span-2 flex justify-end"><button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold text-sm shadow-sm flex items-center gap-1.5 cursor-pointer"><Plus size={16} /> Kirim Pengajuan</button></div>
             </form>
           </div>
 
@@ -949,9 +760,7 @@ export default function App() {
                 <button onClick={() => changeCalendarMonth(1)} className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg cursor-pointer"><ChevronRight size={16} /></button>
               </div>
             </div>
-            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-500 border-b pb-1.5 mb-2">
-              <span>S</span><span>S</span><span>R</span><span>K</span><span>J</span><span>S</span><span>M</span>
-            </div>
+            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-500 border-b pb-1.5 mb-2"><span>S</span><span>S</span><span>R</span><span>K</span><span>J</span><span>S</span><span>M</span></div>
             <div className="grid grid-cols-7 gap-1">
               {calendarDays.map((day, idx) => {
                 if (!day) return <div key={`empty-${idx}`} className="aspect-square"></div>;
@@ -971,55 +780,29 @@ export default function App() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
             <h2 className="text-lg font-semibold text-slate-800 font-sans">Riwayat & Status Lembur</h2>
             <select value={myStatusFilter} onChange={e => setMyStatusFilter(e.target.value)} className="p-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-slate-50 cursor-pointer">
-              <option value="all">Status: Semua</option>
-              <option value="pending">Pending</option>
-              <option value="revisi">Revisi</option>
-              <option value="approved">Approved</option>
-              <option value="reject">Rejected</option>
+              <option value="all">Status: Semua</option><option value="pending">Pending</option><option value="revisi">Revisi</option><option value="approved">Approved</option><option value="reject">Rejected</option>
             </select>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-slate-600 text-xs border-b">
-                  <th className="p-3 font-medium font-sans">Tanggal</th>
-                  <th className="p-3 font-medium font-sans">Waktu</th>
-                  <th className="p-3 font-medium font-sans">Durasi</th>
-                  <th className="p-3 font-medium font-sans">Alasan Lembur</th>
-                  <th className="p-3 font-medium font-sans min-w-[200px]">Status & Bukti Foto</th>
+                  <th className="p-3 font-medium font-sans">Tanggal</th><th className="p-3 font-medium font-sans">Waktu</th><th className="p-3 font-medium font-sans">Durasi</th><th className="p-3 font-medium font-sans">Alasan Lembur</th><th className="p-3 font-medium font-sans min-w-[200px]">Status & Bukti Foto</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredMyRequests.length === 0 ? (
-                  <tr><td colSpan="5" className="p-4 text-center text-slate-500 text-sm">Tidak ada riwayat lembur.</td></tr>
-                ) : (
+                {filteredMyRequests.length === 0 ? <tr><td colSpan="5" className="p-4 text-center text-slate-500 text-sm">Tidak ada riwayat lembur.</td></tr> : (
                   filteredMyRequests.map(req => (
                     <tr key={req.id} className="border-b border-slate-100 text-sm hover:bg-slate-50">
-                      <td className="p-3 whitespace-nowrap">{req.date}</td>
-                      <td className="p-3 whitespace-nowrap">{req.startTime} - {req.endTime}</td>
-                      <td className="p-3 font-semibold text-blue-600">{req.duration.toFixed(1)} j</td>
-                      <td className="p-3 truncate max-w-[200px]" title={req.reason}>{req.reason}</td>
+                      <td className="p-3 whitespace-nowrap">{req.date}</td><td className="p-3 whitespace-nowrap">{req.startTime} - {req.endTime}</td><td className="p-3 font-semibold text-blue-600">{req.duration.toFixed(1)} j</td><td className="p-3 truncate max-w-[200px]" title={req.reason}>{req.reason}</td>
                       <td className="p-3">
                         <div className="flex flex-col gap-1.5">
-                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium self-start ${req.status === 'Approved' ? 'bg-green-100 text-green-700' : (req.status === 'Reject' || req.status === 'Rejected') ? 'bg-red-100 text-red-700' : req.status === 'Revisi' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                            {req.status}
-                          </span>
-                          
-                          {req.approvalComment && (
-                            <div className="text-[10px] p-1.5 rounded bg-slate-50 border text-slate-700 max-w-[220px]">
-                              <strong className="font-bold">Komentar:</strong> {req.approvalComment}
-                            </div>
-                          )}
-
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium self-start ${req.status === 'Approved' ? 'bg-green-100 text-green-700' : (req.status === 'Reject' || req.status === 'Rejected') ? 'bg-red-100 text-red-700' : req.status === 'Revisi' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status}</span>
+                          {req.approvalComment && <div className="text-[10px] p-1.5 rounded bg-slate-50 border text-slate-700 max-w-[220px]"><strong className="font-bold">Komentar:</strong> {req.approvalComment}</div>}
                           <div className="flex items-center gap-2 mt-1">
                             {req.imageUrl && <img src={req.imageUrl} alt="Bukti" onClick={() => setDialog({ type: 'lightbox', title: 'Bukti Foto', imageUrl: req.imageUrl })} className="w-8 h-8 object-cover rounded shadow-xs border cursor-zoom-in hover:opacity-80" />}
                             {req.status === 'Revisi' && (
-                              <>
-                                <label htmlFor={`reupload-${req.id}`} className="flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded text-[10px] font-bold cursor-pointer border border-blue-200">
-                                  <Camera size={12} /> Re-upload
-                                </label>
-                                <input type="file" accept="image/*" id={`reupload-${req.id}`} onChange={(e) => handleCameraReupload(e, req.id)} className="hidden" />
-                              </>
+                              <><label htmlFor={`reupload-${req.id}`} className="flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded text-[10px] font-bold cursor-pointer border border-blue-200"><Camera size={12} /> Re-upload</label><input type="file" accept="image/*" id={`reupload-${req.id}`} onChange={(e) => handleCameraReupload(e, req.id)} className="hidden" /></>
                             )}
                           </div>
                         </div>
@@ -1049,26 +832,15 @@ export default function App() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-sm border-b">
-                <th className="p-3 font-medium font-sans">Nama Pegawai</th>
-                <th className="p-3 font-medium font-sans">Tanggal</th>
-                <th className="p-3 font-medium font-sans">Waktu (Durasi)</th>
-                <th className="p-3 font-medium font-sans">Alasan</th>
-                <th className="p-3 text-center font-sans">Aksi</th>
+                <th className="p-3 font-medium font-sans">Nama Pegawai</th><th className="p-3 font-medium font-sans">Tanggal</th><th className="p-3 font-medium font-sans">Waktu (Durasi)</th><th className="p-3 font-medium font-sans">Alasan</th><th className="p-3 text-center font-sans">Aksi</th>
               </tr>
             </thead>
             <tbody>
-              {activeRequests.length === 0 ? (
-                <tr><td colSpan="5" className="p-6 text-center text-slate-500 text-sm">🎉 Semua pengajuan telah selesai di-review.</td></tr>
-              ) : (
+              {activeRequests.length === 0 ? <tr><td colSpan="5" className="p-6 text-center text-slate-500 text-sm">🎉 Semua pengajuan telah selesai di-review.</td></tr> : (
                 activeRequests.map(req => (
                   <tr key={req.id} className="border-b text-sm hover:bg-slate-50">
-                    <td className="p-3 font-medium text-slate-800">{getEmployeeName(req.nip)} <span className="block text-[10px] text-slate-400 font-normal">{req.nip}</span></td>
-                    <td className="p-3">{req.date}</td>
-                    <td className="p-3">{req.startTime} - {req.endTime} <span className="font-bold text-blue-600">({req.duration.toFixed(1)} j)</span></td>
-                    <td className="p-3 truncate max-w-xs">{req.reason}</td>
-                    <td className="p-3 text-center">
-                      <button onClick={() => setDialog({ type: 'review', request: req, title: 'Review Bukti Lembur' })} className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer">Review Bukti</button>
-                    </td>
+                    <td className="p-3 font-medium text-slate-800">{getEmployeeName(req.nip)} <span className="block text-[10px] text-slate-400 font-normal">{req.nip}</span></td><td className="p-3">{req.date}</td><td className="p-3">{req.startTime} - {req.endTime} <span className="font-bold text-blue-600">({req.duration.toFixed(1)} j)</span></td><td className="p-3 truncate max-w-xs">{req.reason}</td>
+                    <td className="p-3 text-center"><button onClick={() => setDialog({ type: 'review', request: req, title: 'Review Bukti Lembur' })} className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer">Review Bukti</button></td>
                   </tr>
                 ))
               )}
@@ -1079,7 +851,7 @@ export default function App() {
     );
   };
 
-  // --- TAB VIEW: LAPORAN (RESTORED FULL FEATURES) ---
+  // --- TAB VIEW: LAPORAN (RESTORED FULL FEATURES & HIDDEN IFRAME PRINT) ---
   const LaporanView = () => {
     const [selectedMonth, setSelectedMonth] = useState('2026-06');
     const [selectedAtasan, setSelectedAtasan] = useState('all');
@@ -1140,11 +912,7 @@ export default function App() {
     };
 
     const handlePrintNative = () => {
-      if (filteredRequests.length === 0) {
-        setDialog({ type: 'alert', title: 'Data Kosong', message: 'Tidak ada data lembur pada filter saat ini.' });
-        return;
-      }
-
+      if (filteredRequests.length === 0) return setDialog({ type: 'alert', title: 'Data Kosong', message: 'Tidak ada data lembur pada filter saat ini.' });
       setDialog({ type: 'alert', title: 'Menyiapkan Laporan', message: 'Sedang merakit dokumen untuk dicetak...' });
 
       let html = `
@@ -1165,9 +933,7 @@ export default function App() {
               table.data th { background-color: #f1f5f9; text-align: center; font-weight: bold; }
               .text-center { text-align: center; }
               .font-bold { font-weight: bold; }
-              @media print {
-                @page { margin: 10mm; size: A4 portrait; }
-              }
+              @media print { @page { margin: 10mm; size: A4 portrait; } }
             </style>
           </head>
           <body>
@@ -1179,112 +945,48 @@ export default function App() {
 
         html += `
           <div class="page">
-            <div class="header">
-              <div>PT. BANK TABUNGAN NEGARA (PERSERO) TBK</div>
-              <div>KANTOR CABANG MAMUJU</div>
-              <div class="title">LAPORAN RINCIAN LEMBUR</div>
-              <div style="font-weight: normal; font-size: 11px;">BULAN : ${getFormattedMonthYear(selectedMonth)}</div>
-            </div>
-            
-            <table class="info">
-              <tr><td class="font-bold">NAMA</td><td>: ${group.name.toUpperCase()}</td></tr>
-              <tr><td class="font-bold">NIP</td><td>: ${group.nip}</td></tr>
-            </table>
-
+            <div class="header"><div>PT. BANK TABUNGAN NEGARA (PERSERO) TBK</div><div>KANTOR CABANG MAMUJU</div><div class="title">LAPORAN RINCIAN LEMBUR</div><div style="font-weight: normal; font-size: 11px;">BULAN : ${getFormattedMonthYear(selectedMonth)}</div></div>
+            <table class="info"><tr><td class="font-bold">NAMA</td><td>: ${group.name.toUpperCase()}</td></tr><tr><td class="font-bold">NIP</td><td>: ${group.nip}</td></tr></table>
             <table class="data">
-              <thead>
-                <tr>
-                  <th style="width: 15%;">Tanggal</th>
-                  <th style="width: 25%;">Waktu Kerja</th>
-                  <th style="width: 15%;">Durasi</th>
-                  <th style="width: 30%;">Alasan Lembur</th>
-                  <th style="width: 15%;">Status</th>
-                </tr>
-              </thead>
+              <thead><tr><th style="width: 15%;">Tanggal</th><th style="width: 25%;">Waktu Kerja</th><th style="width: 15%;">Durasi</th><th style="width: 30%;">Alasan Lembur</th><th style="width: 15%;">Status</th></tr></thead>
               <tbody>
         `;
-
         group.requests.forEach(req => {
-          html += `
-            <tr>
-              <td class="text-center">${getFormattedDate(req.date)}</td>
-              <td class="text-center">${req.startTime} - ${req.endTime}</td>
-              <td class="text-center font-bold">${req.duration.toFixed(1)} j</td>
-              <td>${req.reason}</td>
-              <td class="text-center">${req.status}</td>
-            </tr>
-          `;
+          html += `<tr><td class="text-center">${getFormattedDate(req.date)}</td><td class="text-center">${req.startTime} - ${req.endTime}</td><td class="text-center font-bold">${req.duration.toFixed(1)} j</td><td>${req.reason}</td><td class="text-center">${req.status}</td></tr>`;
         });
-
-        html += `
-                <tr>
-                  <td colspan="5" class="font-bold" style="background-color: #f8fafc;">
-                    <div style="color: #0284c7;">Approved: ${approvedTotal.toFixed(1)} jam</div>
-                    <div style="color: #ef4444;">Reject: ${rejectTotal.toFixed(1)} jam</div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        `;
+        html += `<tr><td colspan="5" class="font-bold" style="background-color: #f8fafc;"><div style="color: #0284c7;">Approved: ${approvedTotal.toFixed(1)} jam</div><div style="color: #ef4444;">Reject: ${rejectTotal.toFixed(1)} jam</div></td></tr></tbody></table></div>`;
       });
-
       html += `</body></html>`;
 
       const printFrame = document.createElement('iframe');
-      printFrame.style.position = 'absolute';
-      printFrame.style.top = '-10000px';
-      printFrame.style.width = '100%';
-      printFrame.style.height = '100%';
+      printFrame.style.position = 'absolute'; printFrame.style.top = '-10000px'; printFrame.style.width = '100%'; printFrame.style.height = '100%';
       document.body.appendChild(printFrame);
-
-      printFrame.contentWindow.document.open();
-      printFrame.contentWindow.document.write(html);
-      printFrame.contentWindow.document.close();
+      printFrame.contentWindow.document.open(); printFrame.contentWindow.document.write(html); printFrame.contentWindow.document.close();
 
       setTimeout(() => {
         setDialog(null);
-        printFrame.contentWindow.focus();
-        printFrame.contentWindow.print();
+        printFrame.contentWindow.focus(); printFrame.contentWindow.print();
         setTimeout(() => document.body.removeChild(printFrame), 3000);
       }, 500);
     };
 
     const handleExportExcel = () => {
-      if (!window.XLSX) return setDialog({ type: 'alert', title: 'Sistem Belum Siap', message: 'Library XLSX belum termuat sepenuhnya. Mohon coba sesaat lagi.' });
+      if (!window.XLSX) return setDialog({ type: 'alert', title: 'Sistem Belum Siap', message: 'Library XLSX belum termuat sepenuhnya.' });
       if (filteredRequests.length === 0) return setDialog({ type: 'alert', title: 'Data Kosong', message: 'Tidak ada data lembur pada filter saat ini untuk diekspor.' });
 
       const rawExportData = filteredRequests.map(r => ({
         NIP: r.nip, Nama: getEmployeeName(r.nip), Tanggal: r.date, 'Waktu Kerja': `${r.startTime} - ${r.endTime}`,
         'Durasi (Jam)': r.duration, 'Alasan Lembur': r.reason, Status: r.status, Atasan: getEmployeeName(r.atasan) || '-'
       }));
-
       const worksheet = window.XLSX.utils.json_to_sheet(rawExportData);
       const workbook = window.XLSX.utils.book_new();
       window.XLSX.utils.book_append_sheet(workbook, worksheet, "Rincian Lembur");
-      
-      const maxLens = {};
-      rawExportData.forEach(row => {
-        Object.keys(row).forEach(key => maxLens[key] = Math.max(maxLens[key] || 10, String(row[key] || '').length));
-      });
-      worksheet['!cols'] = Object.keys(maxLens).map(key => ({ wch: maxLens[key] + 3 }));
       window.XLSX.writeFile(workbook, `Laporan_Lembur_BTN_Mamuju_${selectedMonth}.xlsx`);
     };
 
     return (
       <div id="laporan-view-container" className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 print-full-width">
-        <style>{`
-          .a4-sheet {
-            width: 210mm;
-            min-height: 297mm;
-            padding: 15mm 20mm;
-            margin: 0 auto 20px auto;
-            background: white;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-            box-sizing: border-box;
-            color: black;
-          }
-        `}</style>
+        <style>{`.a4-sheet { width: 210mm; min-height: 297mm; padding: 15mm 20mm; margin: 0 auto 20px auto; background: white; box-shadow: 0 4px 10px rgba(0,0,0,0.15); box-sizing: border-box; color: black; }`}</style>
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 no-print">
           <h2 className="text-lg font-semibold text-slate-800">Laporan Lembur</h2>
           <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full xl:w-auto">
@@ -1333,18 +1035,11 @@ export default function App() {
           </div>
         )}
 
-        {/* --- MODAL PRATINJAU DOKUMEN --- */}
         {isPrintMode && (
           <div className="fixed inset-0 bg-slate-800 bg-opacity-95 z-[999] p-4 sm:p-8 overflow-y-auto flex flex-col items-center">
             <div className="flex justify-between items-center bg-slate-900 border border-slate-700 text-white p-4 rounded-xl mb-6 shadow-lg w-full max-w-[210mm] sticky top-4 z-50">
-              <div className="text-left">
-                <p className="font-semibold text-sm">Pratinjau Kertas A4 (Native Layout)</p>
-                <p className="text-xs text-slate-400">Data lembur terbagi rapi 1 halaman untuk setiap petugas.</p>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={handlePrintNative} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"><Printer size={14}/> Cetak Native</button>
-                <button onClick={() => setIsPrintMode(false)} className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"><X size={14}/> Tutup</button>
-              </div>
+              <div className="text-left"><p className="font-semibold text-sm">Pratinjau Kertas A4 (Native Layout)</p><p className="text-xs text-slate-400">Data lembur terbagi rapi 1 halaman untuk setiap petugas.</p></div>
+              <div className="flex gap-2"><button onClick={handlePrintNative} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"><Printer size={14}/> Cetak Native</button><button onClick={() => setIsPrintMode(false)} className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"><X size={14}/> Tutup</button></div>
             </div>
             
             <div className="w-full flex flex-col items-center gap-6">
@@ -1354,50 +1049,15 @@ export default function App() {
                 return (
                   <div key={group.nip} className="a4-sheet bg-white p-[20mm] rounded shadow-2xl border border-slate-300 text-black text-left flex flex-col justify-between font-sans">
                     <div>
-                      <div className="border-b pb-4 mb-4">
-                        <p className="font-bold text-[11px] tracking-wider text-slate-900 leading-tight">PT. BANK TABUNGAN NEGARA (PERSERO) TBK</p>
-                        <p className="font-bold text-[11px] tracking-wider text-slate-900 leading-tight">KANTOR CABANG MAMUJU</p>
-                        <p className="font-bold text-sm tracking-widest text-slate-800 mt-4 underline decoration-solid">LAPORAN RINCIAN LEMBUR</p>
-                        <p className="text-xs font-semibold text-slate-600 mt-1 uppercase">BULAN: {getFormattedMonthYear(selectedMonth)}</p>
-                      </div>
-                      <table className="mb-4">
-                        <tbody>
-                          <tr className="text-xs font-bold text-slate-800">
-                            <td className="w-16">NAMA</td><td>: {group.name.toUpperCase()}</td>
-                          </tr>
-                          <tr className="text-xs font-bold text-slate-800">
-                            <td>NIP</td><td>: {group.nip}</td>
-                          </tr>
-                        </tbody>
-                      </table>
+                      <div className="border-b pb-4 mb-4"><p className="font-bold text-[11px] tracking-wider text-slate-900 leading-tight">PT. BANK TABUNGAN NEGARA (PERSERO) TBK</p><p className="font-bold text-[11px] tracking-wider text-slate-900 leading-tight">KANTOR CABANG MAMUJU</p><p className="font-bold text-sm tracking-widest text-slate-800 mt-4 underline decoration-solid">LAPORAN RINCIAN LEMBUR</p><p className="text-xs font-semibold text-slate-600 mt-1 uppercase">BULAN: {getFormattedMonthYear(selectedMonth)}</p></div>
+                      <table className="mb-4"><tbody><tr className="text-xs font-bold text-slate-800"><td className="w-16">NAMA</td><td>: {group.name.toUpperCase()}</td></tr><tr className="text-xs font-bold text-slate-800"><td>NIP</td><td>: {group.nip}</td></tr></tbody></table>
                       <table className="w-full border-collapse border border-slate-400 text-xs text-slate-800">
-                        <thead>
-                          <tr className="bg-slate-100 border-b border-slate-400 font-bold">
-                            <th className="p-2 border border-slate-400 text-center">Tanggal</th>
-                            <th className="p-2 border border-slate-400 text-center">Waktu Kerja</th>
-                            <th className="p-2 border border-slate-400 text-center">Durasi</th>
-                            <th className="p-2 border border-slate-400">Alasan Lembur</th>
-                            <th className="p-2 border border-slate-400 text-center">Status</th>
-                          </tr>
-                        </thead>
+                        <thead><tr className="bg-slate-100 border-b border-slate-400 font-bold"><th className="p-2 border border-slate-400 text-center">Tanggal</th><th className="p-2 border border-slate-400 text-center">Waktu Kerja</th><th className="p-2 border border-slate-400 text-center">Durasi</th><th className="p-2 border border-slate-400">Alasan Lembur</th><th className="p-2 border border-slate-400 text-center">Status</th></tr></thead>
                         <tbody>
                           {group.requests.map(req => (
-                            <tr key={req.id} className="border-b border-slate-400">
-                              <td className="p-2 border border-slate-400 text-center">{getFormattedDate(req.date)}</td>
-                              <td className="p-2 border border-slate-400 text-center">{req.startTime} - {req.endTime}</td>
-                              <td className="p-2 border border-slate-400 text-center font-bold text-slate-900">{req.duration.toFixed(1)} j</td>
-                              <td className="p-2 border border-slate-400">{req.reason}</td>
-                              <td className="p-2 border border-slate-400 text-center">{req.status}</td>
-                            </tr>
+                            <tr key={req.id} className="border-b border-slate-400"><td className="p-2 border border-slate-400 text-center">{getFormattedDate(req.date)}</td><td className="p-2 border border-slate-400 text-center">{req.startTime} - {req.endTime}</td><td className="p-2 border border-slate-400 text-center font-bold text-slate-900">{req.duration.toFixed(1)} j</td><td className="p-2 border border-slate-400">{req.reason}</td><td className="p-2 border border-slate-400 text-center">{req.status}</td></tr>
                           ))}
-                          <tr className="font-bold bg-slate-50">
-                            <td colSpan="5" className="p-2.5 border border-slate-400 text-slate-900">
-                              <div className="flex justify-between">
-                                <span>Approved: {approvedTotal.toFixed(1)} Jam</span>
-                                <span className="text-red-600">Reject: {rejectTotal.toFixed(1)} Jam</span>
-                              </div>
-                            </td>
-                          </tr>
+                          <tr className="font-bold bg-slate-50"><td colSpan="5" className="p-2.5 border border-slate-400 text-slate-900"><div className="flex justify-between"><span>Approved: {approvedTotal.toFixed(1)} Jam</span><span className="text-red-600">Reject: {rejectTotal.toFixed(1)} Jam</span></div></td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -1414,7 +1074,6 @@ export default function App() {
   // --- TAB VIEW: STATISTIK (RESTORED PROGRESS BARS) ---
   const StatistikView = () => {
     const [selectedMonth, setSelectedMonth] = useState('2026-06');
-
     const metrics = useMemo(() => {
       let filtered = requests.filter(r => (r.status === 'Approved' || r.status === 'Registered') && r.date.startsWith(selectedMonth));
       const totalJam = filtered.reduce((sum, r) => sum + r.duration, 0);
@@ -1465,7 +1124,7 @@ export default function App() {
     );
   };
 
-  // --- TAB VIEW: PEGAWAI (RESTORED ALL ADVANCED MANAGEMENT & EXCEL IMPORT) ---
+  // --- TAB VIEW: PEGAWAI (RESTORED ALL ADVANCED MANAGEMENT & CSV FAILSAFE) ---
   const PegawaiView = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState({ nip: '', name: '', position: '', noHandphone: '', role: 'maker', atasan: '' });
@@ -1477,48 +1136,30 @@ export default function App() {
       e.preventDefault();
       try {
         const defaultHash = hashPassword(editForm.nip, editForm.nip);
-        const newEmp = {
-          ...editForm,
-          passwordHash: defaultHash,
-          passwordChanged: false
-        };
+        const newEmp = { ...editForm, passwordHash: defaultHash, passwordChanged: false };
         delete newEmp.password;
 
         if (isDemoMode) {
-          if (isEditing) {
-            setEmployees(prev => prev.map(emp => emp.nip === editForm.nip ? newEmp : emp));
-          } else {
-            setEmployees(prev => [...prev, newEmp]);
-          }
+          if (isEditing) setEmployees(prev => prev.map(emp => emp.nip === editForm.nip ? newEmp : emp));
+          else setEmployees(prev => [...prev, newEmp]);
           setDialog({ type: 'alert', title: 'Berhasil', message: 'Pegawai berhasil disimpan!' });
         } else {
           await runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', editForm.nip), newEmp));
         }
-        setIsEditing(false);
-        setEditForm({ nip: '', name: '', position: '', noHandphone: '', role: 'maker', atasan: '' });
-      } catch (err) {
-        setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal menyimpan data pegawai.' });
-      }
+        setIsEditing(false); setEditForm({ nip: '', name: '', position: '', noHandphone: '', role: 'maker', atasan: '' });
+      } catch (err) { setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal menyimpan data pegawai.' }); }
     };
 
-    const handleEdit = (emp) => {
-      setEditForm({ ...emp, noHandphone: emp.noHandphone || '' });
-      setIsEditing(true);
-    };
+    const handleEdit = (emp) => { setEditForm({ ...emp, noHandphone: emp.noHandphone || '' }); setIsEditing(true); };
 
     const handleDelete = (nip) => {
       setDialog({
         type: 'confirm', title: 'Hapus Pegawai', message: 'Yakin ingin menghapus data pegawai ini secara permanen?', isDanger: true,
         onConfirm: async () => {
           try {
-            if (isDemoMode) {
-              setEmployees(prev => prev.filter(emp => emp.nip !== nip));
-            } else {
-              await runWithRetry(() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', nip)));
-            }
-          } catch(err) {
-            setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal menghapus data.' });
-          }
+            if (isDemoMode) setEmployees(prev => prev.filter(emp => emp.nip !== nip));
+            else await runWithRetry(() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', nip)));
+          } catch(err) { setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal menghapus data.' }); }
         }
       });
     };
@@ -1528,42 +1169,123 @@ export default function App() {
         type: 'confirm', title: 'Hapus Semua Data', message: 'PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA data pegawai saat ini? (Kecuali Administrator).', isDanger: true,
         onConfirm: async () => {
           try {
-            if (isDemoMode) {
-              setEmployees(prev => prev.filter(emp => emp.role === 'admin'));
-            } else {
+            if (isDemoMode) setEmployees(prev => prev.filter(emp => emp.role === 'admin'));
+            else {
               const batch = writeBatch(db);
-              employees.forEach(emp => {
-                if (emp.nip !== 'admin' && emp.nip !== '19720906') {
-                  const ref = doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.nip);
-                  batch.delete(ref);
-                }
-              });
+              employees.forEach(emp => { if (emp.nip !== 'admin' && emp.nip !== '19720906') batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.nip)); });
               await runWithRetry(() => batch.commit());
             }
             setImportSuccess('Semua data pegawai berhasil dibersihkan.');
             setTimeout(() => setImportSuccess(''), 5000);
-          } catch (err) {
-            setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal menghapus data.' });
-          }
+          } catch (err) { setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal menghapus data.' }); }
         }
       });
+    };
+
+    // --- IMMERSIVE FAIL-SAFE CSV PARSER (100% Offline) ---
+    const parseCSVData = async (text) => {
+      try {
+        const lines = text.split(/\r?\n/);
+        if (lines.length < 2) return setDialog({ type: 'alert', title: 'Berkas Kosong', message: 'File CSV Anda tidak memiliki baris data atau baris header.' });
+
+        const headerLine = lines[0];
+        const delimiter = headerLine.includes(';') ? ';' : ',';
+        const parseCSVLine = (line) => {
+          const result = []; let current = ''; let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') inQuotes = !inQuotes;
+            else if (char === delimiter && !inQuotes) { result.push(current.trim()); current = ''; } 
+            else current += char;
+          }
+          result.push(current.trim());
+          return result;
+        };
+
+        const headers = parseCSVLine(headerLine).map(h => h.toLowerCase().replace(/"/g, ''));
+        const nipIdx = headers.findIndex(h => h.includes('nip') || h.includes('nik') || h === 'nip/nik');
+        const nameIdx = headers.findIndex(h => h.includes('name') || h.includes('nama') || h === 'full name');
+        const posIdx = headers.findIndex(h => h.includes('position') || h.includes('jabatan') || h === 'posisi');
+        const phoneIdx = headers.findIndex(h => h.includes('handphone') || h.includes('no hp') || h.includes('phone') || h.includes('hp'));
+        const atasanIdx = headers.findIndex(h => h.includes('atasan') || h.includes('approval'));
+        const roleIdx = headers.findIndex(h => h.includes('role') || h.includes('status') || h.includes('hak akses'));
+
+        if (nipIdx === -1 || nameIdx === -1) return setDialog({ type: 'alert', title: 'Kolom Penting Hilang', message: "Sistem pengurai CSV membutuhkan baris pertama yang berisi kolom bernama 'NIP' dan 'Nama' (atau 'Full Name') secara eksplisit." });
+
+        let count = 0;
+        const newEmps = [...employees];
+        const batch = !isDemoMode ? writeBatch(db) : null;
+        const employeeMap = {};
+
+        for (let i = 1; i < lines.length; i++) {
+          if (!lines[i].trim()) continue;
+          const columns = parseCSVLine(lines[i]);
+          const nipVal = columns[nipIdx]?.replace(/"/g, ''); const nameVal = columns[nameIdx]?.replace(/"/g, '');
+          if (nipVal && nameVal) employeeMap[nameVal.toLowerCase()] = nipVal;
+        }
+
+        for (let i = 1; i < lines.length; i++) {
+          if (!lines[i].trim()) continue;
+          const columns = parseCSVLine(lines[i]);
+          
+          const nip = columns[nipIdx]?.replace(/"/g, ''); const name = columns[nameIdx]?.replace(/"/g, '');
+          if (!nip || !name || nip === 'undefined' || nip === 'admin') continue;
+          if (newEmps.some(emp => emp.nip === nip)) continue;
+
+          const position = posIdx !== -1 ? columns[posIdx]?.replace(/"/g, '') : '';
+          const noHandphone = phoneIdx !== -1 ? columns[phoneIdx]?.replace(/"/g, '') : '';
+          let atasanRaw = atasanIdx !== -1 ? columns[atasanIdx]?.replace(/"/g, '') : '';
+          const roleRaw = roleIdx !== -1 ? columns[roleIdx]?.replace(/"/g, '').toLowerCase() : 'maker';
+
+          if (atasanRaw && isNaN(atasanRaw)) {
+            const mappedNip = employeeMap[atasanRaw.toLowerCase()];
+            if (mappedNip) atasanRaw = mappedNip;
+          }
+
+          let role = 'maker';
+          if (roleRaw.includes('admin')) role = 'admin';
+          else if (roleRaw.includes('manager')) role = 'manager';
+          else if (roleRaw.includes('approval') || roleRaw.includes('atasan')) role = 'approval';
+
+          const defaultHash = hashPassword(nip, nip);
+          const newEmp = { nip, name, position, noHandphone, role, atasan: atasanRaw, passwordHash: defaultHash, passwordChanged: false };
+
+          if (isDemoMode) newEmps.push(newEmp);
+          else batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'employees', nip), newEmp);
+          count++;
+        }
+
+        if (count > 0) {
+          if (isDemoMode) { setEmployees(newEmps); setImportSuccess(`Berhasil mengimpor ${count} data pegawai baru dari CSV (Lokal)!`); } 
+          else { await runWithRetry(() => batch.commit()); setImportSuccess(`Berhasil mengimpor ${count} data pegawai baru dari CSV ke Cloud!`); }
+        } else setImportSuccess("Semua data pegawai di dalam CSV sudah terdaftar di sistem.");
+        setTimeout(() => setImportSuccess(''), 5000);
+
+      } catch (err) { setDialog({ type: 'alert', title: 'Gagal Penguraian', message: 'Gagal memproses file CSV: ' + err.message }); }
     };
 
     const handleImportFile = (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      if (!window.XLSX) {
-        setDialog({ type: 'alert', title: 'Sistem Sibuk', message: 'Sedang memuat library Excel. Silakan coba klik tombol kembali.' });
-        return;
+
+      if (file.name.endsWith('.csv')) {
+        const reader = new FileReader();
+        reader.onload = (event) => parseCSVData(event.target.result);
+        reader.readAsText(file);
+        e.target.value = null; return;
       }
+
+      if (!window.XLSX) {
+        setDialog({ type: 'alert', title: 'Sistem Sandbox Terkunci', message: 'Gagal memuat pustaka XLSX dinamis. Solusi: Harap simpan / Save As file data pegawai Anda ke format CSV Comma Separated (.csv) lalu unggah kembali berkas tersebut.' });
+        e.target.value = null; return;
+      }
+
       const reader = new FileReader();
       reader.onload = async (event) => {
         const data = new Uint8Array(event.target.result);
         const workbook = window.XLSX.read(data, { type: 'array' });
-        let count = 0;
-        let dataFound = false;
-        const newEmps = [...employees];
-        const batch = !isDemoMode ? writeBatch(db) : null;
+        let count = 0; let dataFound = false;
+        const newEmps = [...employees]; const batch = !isDemoMode ? writeBatch(db) : null;
 
         for (const sheetName of workbook.SheetNames) {
           const worksheet = workbook.Sheets[sheetName];
@@ -1586,56 +1308,39 @@ export default function App() {
 
             if (nipKey && nameKey) {
               dataFound = true; 
-              const nip = String(row[nipKey] || '').trim();
-              const name = String(row[nameKey] || '').trim();
+              const nip = String(row[nipKey] || '').trim(); const name = String(row[nameKey] || '').trim();
+              if (!nip || !name || newEmps.some(emp => emp.nip === nip)) continue;
+
               const position = posKey ? String(row[posKey] || '').trim() : '';
               const noHandphone = phoneKey ? String(row[phoneKey] || '').trim() : '';
               let atasanRaw = atasanKey ? String(row[atasanKey] || '').trim() : '';
+              const roleRaw = roleKey ? String(row[roleKey] || '').trim().toLowerCase() : '';
+
               if (atasanRaw && isNaN(atasanRaw)) {
                 const mappedNip = employeeMap[atasanRaw.toLowerCase()];
                 if (mappedNip) atasanRaw = mappedNip;
               }
-              if (nip && name && !newEmps.some(emp => emp.nip === nip)) {
-                let role = 'maker';
-                const importedRole = roleKey ? String(row[roleKey] || '').trim().toLowerCase() : '';
-                if (importedRole.includes('admin')) role = 'admin';
-                else if (importedRole.includes('manager')) role = 'manager';
-                else if (importedRole.includes('approval') || importedRole.includes('atasan')) role = 'approval';
+              
+              let role = 'maker';
+              if (roleRaw.includes('admin')) role = 'admin'; else if (roleRaw.includes('manager')) role = 'manager'; else if (roleRaw.includes('approval') || roleRaw.includes('atasan')) role = 'approval';
 
-                const defaultHash = hashPassword(nip, nip);
-                const newEmp = { nip, name, position, noHandphone, role, atasan: atasanRaw, passwordHash: defaultHash, passwordChanged: false };
-                
-                if (isDemoMode) {
-                  newEmps.push(newEmp);
-                } else {
-                  batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'employees', nip), newEmp);
-                }
-                count++;
-              }
+              const defaultHash = hashPassword(nip, nip);
+              const newEmp = { nip, name, position, noHandphone, role, atasan: atasanRaw, passwordHash: defaultHash, passwordChanged: false };
+              
+              if (isDemoMode) newEmps.push(newEmp); else batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'employees', nip), newEmp);
+              count++;
             }
           }
           if (dataFound) break;
         }
 
         if (count > 0) {
-          if (isDemoMode) {
-            setEmployees(newEmps);
-            setImportSuccess(`Berhasil mengimpor ${count} data pegawai baru (Lokal)!`);
-          } else {
-            try {
-              await runWithRetry(() => batch.commit());
-              setImportSuccess(`Berhasil mengimpor ${count} data pegawai baru ke Cloud!`);
-            } catch (err) {
-              setDialog({ type: 'alert', title: 'Kesalahan', message: 'Terjadi kesalahan saat menyimpan data.' });
-            }
-          }
-        } else {
-          setImportSuccess("Data di file sudah terdaftar semua atau format kolom salah.");
-        }
+          if (isDemoMode) { setEmployees(newEmps); setImportSuccess(`Berhasil mengimpor ${count} data pegawai baru (Lokal)!`); } 
+          else { try { await runWithRetry(() => batch.commit()); setImportSuccess(`Berhasil mengimpor ${count} data pegawai baru ke Cloud!`); } catch (err) { setDialog({ type: 'alert', title: 'Kesalahan', message: 'Terjadi kesalahan saat menyimpan data.' }); } }
+        } else setImportSuccess("Data di file sudah terdaftar semua atau format kolom salah.");
         setTimeout(() => setImportSuccess(''), 5000);
       };
-      reader.readAsArrayBuffer(file);
-      e.target.value = null; 
+      reader.readAsArrayBuffer(file); e.target.value = null; 
     };
 
     const filteredEmployees = useMemo(() => {
@@ -1752,55 +1457,36 @@ export default function App() {
       e.preventDefault();
       try {
         if (isDemoMode) {
-          setParams(localParams);
-          setSaved(true);
-          setTimeout(() => setSaved(false), 3000);
+          setParams(localParams); setSaved(true); setTimeout(() => setSaved(false), 3000);
         } else {
           await runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'params'), localParams));
-          setSaved(true);
-          setTimeout(() => setSaved(false), 3000);
+          setSaved(true); setTimeout(() => setSaved(false), 3000);
         }
-      } catch (err) {
-        setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal menyimpan pengaturan.' });
-      }
+      } catch (err) { setDialog({ type: 'alert', title: 'Kesalahan', message: 'Gagal menyimpan pengaturan.' }); }
     };
 
     const handleInitResetFlow = () => {
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
-      setResetOtp(otp);
-      setShowResetModal(true);
-      setEnteredResetOtp('');
-      setResetOtpError('');
+      setResetOtp(otp); setShowResetModal(true); setEnteredResetOtp(''); setResetOtpError('');
     };
 
     const handleVerifyResetOtp = async (e) => {
       e.preventDefault();
       if (enteredResetOtp === resetOtp) {
         if (isDemoMode) {
-          setRequests([]);
-          setShowResetModal(false);
-          setDialog({ type: 'alert', title: 'Data Berhasil Direset', message: 'Semua data pengajuan lembur lokal telah dibersihkan.' });
+          setRequests([]); setShowResetModal(false); setDialog({ type: 'alert', title: 'Data Berhasil Direset', message: 'Semua data pengajuan lembur lokal telah dibersihkan.' });
         } else {
           try {
-            const batch = writeBatch(db);
-            let count = 0;
+            const batch = writeBatch(db); let count = 0;
             for (let i = 0; i < requests.length; i++) {
-              const req = requests[i];
-              const ref = doc(db, 'artifacts', appId, 'public', 'data', 'requests', req.id);
-              batch.delete(ref);
-              count++;
+              batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'requests', requests[i].id)); count++;
               if (count === 400) { await runWithRetry(() => batch.commit()); count = 0; }
             }
             if (count > 0) await runWithRetry(() => batch.commit());
-            setShowResetModal(false);
-            setDialog({ type: 'alert', title: 'Data Berhasil Direset', message: 'Semua data pengajuan lembur (approval) telah dibersihkan secara permanen.' });
-          } catch (err) {
-            setDialog({ type: 'alert', title: 'Kesalahan', message: 'Sistem gagal membersihkan database awan.' });
-          }
+            setShowResetModal(false); setDialog({ type: 'alert', title: 'Data Berhasil Direset', message: 'Semua data pengajuan lembur (approval) telah dibersihkan secara permanen.' });
+          } catch (err) { setDialog({ type: 'alert', title: 'Kesalahan', message: 'Sistem gagal membersihkan database awan.' }); }
         }
-      } else {
-        setResetOtpError('Kode konfirmasi salah. Periksa kembali angka yang tertera.');
-      }
+      } else setResetOtpError('Kode konfirmasi salah. Periksa kembali angka yang tertera.');
     };
 
     return (
@@ -1842,7 +1528,7 @@ export default function App() {
                     <p className="text-xs text-amber-800 font-medium mb-1">Ketik kode berikut untuk konfirmasi:</p>
                     <div className="text-2xl font-mono font-bold text-amber-900 tracking-widest">{resetOtp}</div>
                   </div>
-                  <input type="text" maxLength={6} required placeholder="______" value={enteredResetOtp} onChange={e => setEnteredResetOtp(e.target.value.replace(/[^0-9]/g, ''))} className="w-full p-3 border rounded-xl text-center font-mono text-xl tracking-widest font-bold focus:ring-2 focus:ring-red-500" />
+                  <input type="text" maxLength={6} required placeholder="______" value={enteredResetOtp} onChange={e => setEnteredResetOtp(e.target.value.replace(/[^0-9]/g, ''))} className="w-full p-3 border rounded-xl text-center font-mono text-xl tracking-widest font-bold focus:ring-2 focus:ring-blue-500" />
                   {resetOtpError && <p className="text-xs text-red-500 font-medium text-center">{resetOtpError}</p>}
                   <div className="flex gap-2 pt-2">
                     <button type="button" onClick={() => setShowResetModal(false)} className="flex-1 py-2.5 text-xs font-semibold bg-gray-100 rounded-xl">Batal</button>
@@ -1863,26 +1549,20 @@ export default function App() {
       setGenerating(true);
       const activeEmployees = employees.filter(e => e.role !== 'admin');
       if (activeEmployees.length === 0) {
-        setDialog({ type: 'alert', title: 'Pegawai Kosong', message: 'Silakan tambah atau impor pegawai terlebih dahulu sebelum membuat simulasi.' });
-        setGenerating(false);
-        return;
+        setDialog({ type: 'alert', title: 'Pegawai Kosong', message: 'Silakan tambah atau impor pegawai terlebih dahulu.' });
+        setGenerating(false); return;
       }
 
       try {
-        const dummyRequests = [];
-        const targetApprovedHours = 40;
-        
+        const dummyRequests = []; const targetApprovedHours = 40;
         activeEmployees.forEach(emp => {
           const availableDays = Array.from({ length: 30 }, (_, i) => i + 1);
-          // Shuffle hari secara acak
           for (let i = availableDays.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [availableDays[i], availableDays[j]] = [availableDays[j], availableDays[i]];
           }
 
-          let dayIndex = 0;
-          let approvedTotal = 0;
-
+          let dayIndex = 0; let approvedTotal = 0;
           while (approvedTotal < targetApprovedHours && dayIndex < 20) {
             const remaining = targetApprovedHours - approvedTotal;
             let duration = Math.floor(Math.random() * 4) + 2; 
@@ -1895,18 +1575,7 @@ export default function App() {
             const endTimeStr = `${endHour < 10 ? '0' + endHour : endHour}:00`;
 
             const id = `dummy-approved-${emp.nip}-${dayStr}-${Date.now()}`;
-            dummyRequests.push({
-              id,
-              nip: emp.nip,
-              date: dateStr,
-              startTime: "17:00",
-              endTime: endTimeStr,
-              duration,
-              reason: "Penyelesaian laporan kerja (Simulasi)",
-              status: "Approved",
-              atasan: emp.atasan || "19720906",
-              isDummy: true
-            });
+            dummyRequests.push({ id, nip: emp.nip, date: dateStr, startTime: "17:00", endTime: endTimeStr, duration, reason: "Penyelesaian laporan kerja (Simulasi)", status: "Approved", atasan: emp.atasan || "19720906", isDummy: true });
             approvedTotal += duration;
           }
         });
@@ -1916,17 +1585,12 @@ export default function App() {
           setDialog({ type: 'alert', title: 'Simulasi Sukses', message: `Berhasil membuat data lembur lokal baru untuk ${activeEmployees.length} pegawai.` });
         } else {
           const batch = writeBatch(db);
-          dummyRequests.forEach(req => {
-            batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'requests', req.id), req);
-          });
+          dummyRequests.forEach(req => batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'requests', req.id), req));
           await runWithRetry(() => batch.commit());
           setDialog({ type: 'alert', title: 'Simulasi Sukses', message: `Berhasil menyinkronkan data lembur tiruan ke Firebase.` });
         }
-      } catch (err) {
-        setDialog({ type: 'alert', title: 'Kesalahan', message: 'Sistem gagal menyimpan data simulasi.' });
-      } finally {
-        setGenerating(false);
-      }
+      } catch (err) { setDialog({ type: 'alert', title: 'Kesalahan', message: 'Sistem gagal menyimpan data simulasi.' }); } 
+      finally { setGenerating(false); }
     };
 
     const handleClearDummies = async () => {
@@ -1934,8 +1598,7 @@ export default function App() {
       const dummies = requests.filter(r => r.isDummy === true);
       if (dummies.length === 0) {
         setDialog({ type: 'alert', title: 'Tidak Ada Data', message: 'Tidak ada data lembur simulator yang tersimpan.' });
-        setGenerating(false);
-        return;
+        setGenerating(false); return;
       }
 
       try {
@@ -1944,17 +1607,12 @@ export default function App() {
           setDialog({ type: 'alert', title: 'Pembersihan Sukses', message: 'Semua data tiruan lokal berhasil dihapus.' });
         } else {
           const batch = writeBatch(db);
-          dummies.forEach(req => {
-            batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'requests', req.id));
-          });
+          dummies.forEach(req => batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'requests', req.id)));
           await runWithRetry(() => batch.commit());
           setDialog({ type: 'alert', title: 'Pembersihan Sukses', message: 'Semua data tiruan di database awan berhasil dihapus.' });
         }
-      } catch (err) {
-        setDialog({ type: 'alert', title: 'Kesalahan', message: 'Sistem gagal membersihkan data simulator.' });
-      } finally {
-        setGenerating(false);
-      }
+      } catch (err) { setDialog({ type: 'alert', title: 'Kesalahan', message: 'Sistem gagal membersihkan data simulator.' }); } 
+      finally { setGenerating(false); }
     };
 
     return (
@@ -1973,7 +1631,7 @@ export default function App() {
                 <h3 className="text-sm font-bold text-slate-800">Generate Data Lembur Tiruan</h3>
                 <p className="text-xs text-slate-500 max-w-md">Menyuntikkan total 40 jam kerja lembur status "Approved" untuk semua pegawai aktif pada periode bulan Juni 2026.</p>
               </div>
-              <button onClick={handleGenerate} disabled={generating} className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer">{generating ? <Loader2 className="animate-spin" size={14} /* standard */ /> : <Plus size={14} />} Jalankan Simulator</button>
+              <button onClick={handleGenerate} disabled={generating} className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer">{generating ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Jalankan Simulator</button>
             </div>
             <div className="bg-red-50 p-4 rounded-xl border border-red-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div className="text-left">
@@ -2034,6 +1692,7 @@ export default function App() {
           </div>
         </header>
 
+        {/* CONTENT VIEW AREA */}
         <div id="app-content-area" className="p-4 md:p-6 flex-1 overflow-y-auto print:block print:overflow-visible print:h-auto print:min-h-0 print:p-0">
           {activeTab === 'pengajuan' && <PengajuanView />}
           {activeTab === 'approval' && <ApprovalView />}
