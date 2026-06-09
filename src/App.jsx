@@ -157,8 +157,7 @@ const hashPassword = (password, salt) => {
 };
 
 export default function App() {
-  // Nilai default isDemoMode menjadi false agar selalu mencoba terhubung ke Firebase di Vercel/Produksi
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(true);
   const [user, setUser] = useState(null); 
   const [isAuthed, setIsAuthed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -245,31 +244,43 @@ export default function App() {
 
   // 1. KONEKSI & AUTENTIKASI FIREBASE SELALU AKTIF
   useEffect(() => {
-    setLoading(true);
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-        setIsAuthed(true);
-      } catch (err) {
-        try { 
-          await signInAnonymously(auth); 
-          setIsAuthed(true); 
-        } catch (e) { 
-          setAuthOrFirestoreError("auth-failed"); 
-          setLoading(false); 
-        }
+    let firebaseActive = false;
+    try {
+      if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+        firebaseActive = true;
+        setIsDemoMode(false);
       }
-    };
-    initAuth();
+    } catch (e) {}
 
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-    });
-    return () => unsubscribe();
+    if (firebaseActive) {
+      setLoading(true);
+      const initAuth = async () => {
+        try {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+          setIsAuthed(true);
+        } catch (err) {
+          try { 
+            await signInAnonymously(auth); 
+            setIsAuthed(true); 
+          } catch (e) { 
+            setAuthOrFirestoreError("auth-failed"); 
+            setLoading(false); 
+          }
+        }
+      };
+      initAuth();
+
+      const unsubscribe = onAuthStateChanged(auth, (u) => {
+        setUser(u);
+      });
+      return () => unsubscribe();
+    } else {
+      setLoading(false);
+    }
   }, []);
 
   // 2. LIVE FIRESTORE SUBSCRIPTIONS
@@ -279,8 +290,16 @@ export default function App() {
     const empRef = collection(db, 'artifacts', appId, 'public', 'data', 'employees');
     const unsubEmp = onSnapshot(empRef, (snap) => {
       let emps = snap.docs.map(d => d.data());
-      if (emps.length === 0 || !emps.some(e => e.role === 'admin')) {
-        emps = [{ nip: 'admin', name: 'Administrator (Darurat)', position: 'System Admin', noHandphone: '-', role: 'admin', atasan: '' }, ...emps];
+      
+      // Jika database di Canvas kosong, otomatis isi dengan data Hengki dkk
+      if (snap.empty) {
+        emps = [...INITIAL_DEMO_EMPLOYEES];
+        INITIAL_DEMO_EMPLOYEES.forEach(emp => {
+          runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.nip), emp));
+        });
+      } else if (!emps.some(e => e.role === 'admin' || e.role === 'manager')) {
+        // Fallback jika tidak ada admin sama sekali
+        emps = [{ nip: 'admin', name: 'Administrator (Darurat)', position: 'System Admin', noHandphone: '-', role: 'admin', atasan: '', passwordHash: '', passwordChanged: false }, ...emps];
       }
       setEmployees(emps);
       setLoading(false); 
@@ -290,7 +309,19 @@ export default function App() {
     });
 
     const reqRef = collection(db, 'artifacts', appId, 'public', 'data', 'requests');
-    const unsubReq = onSnapshot(reqRef, (snap) => setRequests(snap.docs.map(d => d.data())));
+    const unsubReq = onSnapshot(reqRef, (snap) => {
+      let reqs = snap.docs.map(d => d.data());
+      
+      // Isi data lembur awal jika kosong
+      if (snap.empty) {
+        reqs = [...INITIAL_DEMO_REQUESTS];
+        INITIAL_DEMO_REQUESTS.forEach(req => {
+          runWithRetry(() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'requests', req.id), req));
+        });
+      }
+      setRequests(reqs);
+    });
+
     const paramRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'params');
     const unsubParam = onSnapshot(paramRef, (snap) => {
       if (snap.exists()) setParams(snap.data());
