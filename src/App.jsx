@@ -157,7 +157,7 @@ const hashPassword = (password, salt) => {
 };
 
 export default function App() {
-  const [isDemoMode, setIsDemoMode] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [user, setUser] = useState(null); 
   const [isAuthed, setIsAuthed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -244,43 +244,32 @@ export default function App() {
 
   // 1. KONEKSI & AUTENTIKASI FIREBASE SELALU AKTIF
   useEffect(() => {
-    let firebaseActive = false;
-    try {
-      if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-        firebaseActive = true;
-        setIsDemoMode(false);
-      }
-    } catch (e) {}
-
-    if (firebaseActive) {
-      setLoading(true);
-      const initAuth = async () => {
-        try {
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } else {
-            await signInAnonymously(auth);
-          }
-          setIsAuthed(true);
-        } catch (err) {
-          try { 
-            await signInAnonymously(auth); 
-            setIsAuthed(true); 
-          } catch (e) { 
-            setAuthOrFirestoreError("auth-failed"); 
-            setLoading(false); 
-          }
+    setIsDemoMode(false);
+    setLoading(true);
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
         }
-      };
-      initAuth();
+        setIsAuthed(true);
+      } catch (err) {
+        try { 
+          await signInAnonymously(auth); 
+          setIsAuthed(true); 
+        } catch (e) { 
+          setAuthOrFirestoreError("auth-failed"); 
+          setLoading(false); 
+        }
+      }
+    };
+    initAuth();
 
-      const unsubscribe = onAuthStateChanged(auth, (u) => {
-        setUser(u);
-      });
-      return () => unsubscribe();
-    } else {
-      setLoading(false);
-    }
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsubscribe();
   }, []);
 
   // 2. LIVE FIRESTORE SUBSCRIPTIONS
@@ -1712,7 +1701,7 @@ export default function App() {
             <h2 className="hidden md:block text-lg font-semibold text-slate-800 capitalize font-sans">{navItems.find(i => i.id === activeTab)?.label || 'Dashboard'}</h2>
             {isDemoMode && <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-bold animate-pulse flex items-center gap-1"><AlertTriangle size={12} /> MODE DEMO OFFLINE</span>}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {currentUser?.role === 'admin' && pendingResets.length > 0 && (
               <button onClick={() => setShowResetRequestsModal(true)} className="relative p-2 text-slate-600 hover:bg-slate-100 bg-slate-50 border rounded-full transition-colors cursor-pointer" title="Permintaan Reset Sandi">
                 <Bell size={18} className="text-red-500 animate-bounce" />
@@ -1720,13 +1709,16 @@ export default function App() {
               </button>
             )}
             <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 flex flex-row items-center gap-1.5">
-              <span className="font-bold text-slate-800">{currentUser?.name}</span>
+              <span className="font-bold text-slate-800 truncate max-w-[100px] sm:max-w-none">{currentUser?.name}</span>
               {currentUser?.position && <span className="text-slate-500 text-xs font-normal hidden sm:inline">— {currentUser.position}</span>}
             </div>
+            {/* Tombol Keluar khusus tampilan HP di sebelah kanan nama */}
+            <button onClick={handleLogout} className="md:hidden p-1.5 bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 rounded-lg transition-colors cursor-pointer shadow-sm flex items-center justify-center" title="Keluar Akun">
+              <LogOut size={18} />
+            </button>
           </div>
         </header>
 
-        {/* CONTENT VIEW AREA */}
         <div id="app-content-area" className="p-4 md:p-6 flex-1 overflow-y-auto print:block print:overflow-visible print:h-auto print:min-h-0 print:p-0">
           {activeTab === 'pengajuan' && <PengajuanView />}
           {activeTab === 'approval' && <ApprovalView />}
@@ -1739,7 +1731,7 @@ export default function App() {
       </main>
 
       {/* MOBILE NAVIGATION */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-between items-center px-1 py-2 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] no-print">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-between items-center px-1 py-2 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] no-print overflow-x-auto">
         {navItems.filter(item => item.roles.includes(currentUser?.role)).map(item => {
           const Icon = item.icon;
           return (
@@ -1749,10 +1741,6 @@ export default function App() {
             </button>
           );
         })}
-        <button onClick={handleLogout} className="flex flex-col items-center justify-center p-2 min-w-[60px] flex-1 rounded-lg text-[10px] font-medium text-red-500 cursor-pointer">
-          <LogOut size={22} className="mb-1 opacity-75" />
-          <span className="truncate w-full text-center leading-tight">Keluar</span>
-        </button>
       </nav>
 
       {/* NOTIFIKASI RESET MODAL */}
