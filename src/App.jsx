@@ -157,10 +157,11 @@ const hashPassword = (password, salt) => {
 };
 
 export default function App() {
-  const [isDemoMode, setIsDemoMode] = useState(true);
-  const [user, setUser] = useState({ uid: "demo-user" }); 
-  const [isAuthed, setIsAuthed] = useState(true);
-  const [loading, setLoading] = useState(false);
+  // Nilai default isDemoMode menjadi false agar selalu mencoba terhubung ke Firebase di Vercel/Produksi
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [user, setUser] = useState(null); 
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [authOrFirestoreError, setAuthOrFirestoreError] = useState(null);
   
   const [employees, setEmployees] = useState(INITIAL_DEMO_EMPLOYEES);
@@ -242,31 +243,33 @@ export default function App() {
     setPasswordError(false);
   };
 
-  // 1. KONEKSI & AUTENTIKASI FIREBASE
+  // 1. KONEKSI & AUTENTIKASI FIREBASE SELALU AKTIF
   useEffect(() => {
-    let firebaseActive = false;
-    try {
-      if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-        firebaseActive = true; setIsDemoMode(false); setUser(null); setIsAuthed(false);
-      }
-    } catch (e) {}
-
-    if (firebaseActive) {
-      setLoading(true);
-      const initAuth = async () => {
-        try {
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
-          else await signInAnonymously(auth);
-          setIsAuthed(true);
-        } catch (err) {
-          try { await signInAnonymously(auth); setIsAuthed(true); } 
-          catch (e) { setAuthOrFirestoreError("auth-failed"); setLoading(false); }
+    setLoading(true);
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
         }
-      };
-      initAuth();
-      const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
-      return () => unsubscribe();
-    }
+        setIsAuthed(true);
+      } catch (err) {
+        try { 
+          await signInAnonymously(auth); 
+          setIsAuthed(true); 
+        } catch (e) { 
+          setAuthOrFirestoreError("auth-failed"); 
+          setLoading(false); 
+        }
+      }
+    };
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsubscribe();
   }, []);
 
   // 2. LIVE FIRESTORE SUBSCRIPTIONS
@@ -1035,6 +1038,7 @@ export default function App() {
           </div>
         )}
 
+        {/* --- MODAL PRATINJAU DOKUMEN --- */}
         {isPrintMode && (
           <div className="fixed inset-0 bg-slate-800 bg-opacity-95 z-[999] p-4 sm:p-8 overflow-y-auto flex flex-col items-center">
             <div className="flex justify-between items-center bg-slate-900 border border-slate-700 text-white p-4 rounded-xl mb-6 shadow-lg w-full max-w-[210mm] sticky top-4 z-50">
@@ -1124,7 +1128,7 @@ export default function App() {
     );
   };
 
-  // --- TAB VIEW: PEGAWAI (RESTORED ALL ADVANCED MANAGEMENT & CSV FAILSAFE) ---
+  // --- TAB VIEW: PEGAWAI ---
   const PegawaiView = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState({ nip: '', name: '', position: '', noHandphone: '', role: 'maker', atasan: '' });
@@ -1182,7 +1186,7 @@ export default function App() {
       });
     };
 
-    // --- IMMERSIVE FAIL-SAFE CSV PARSER (100% Offline) ---
+    // --- IMMERSIVE FAIL-SAFE CSV PARSER ---
     const parseCSVData = async (text) => {
       try {
         const lines = text.split(/\r?\n/);
@@ -1198,8 +1202,7 @@ export default function App() {
             else if (char === delimiter && !inQuotes) { result.push(current.trim()); current = ''; } 
             else current += char;
           }
-          result.push(current.trim());
-          return result;
+          result.push(current.trim()); return result;
         };
 
         const headers = parseCSVLine(headerLine).map(h => h.toLowerCase().replace(/"/g, ''));
@@ -1256,9 +1259,9 @@ export default function App() {
         }
 
         if (count > 0) {
-          if (isDemoMode) { setEmployees(newEmps); setImportSuccess(`Berhasil mengimpor ${count} data pegawai baru dari CSV (Lokal)!`); } 
-          else { await runWithRetry(() => batch.commit()); setImportSuccess(`Berhasil mengimpor ${count} data pegawai baru dari CSV ke Cloud!`); }
-        } else setImportSuccess("Semua data pegawai di dalam CSV sudah terdaftar di sistem.");
+          if (isDemoMode) { setEmployees(newEmps); setImportSuccess(`Berhasil mengimpor ${count} data pegawai (Lokal)!`); } 
+          else { await runWithRetry(() => batch.commit()); setImportSuccess(`Berhasil mengimpor ${count} data pegawai ke Cloud!`); }
+        } else setImportSuccess("Semua data pegawai di dalam CSV sudah terdaftar.");
         setTimeout(() => setImportSuccess(''), 5000);
 
       } catch (err) { setDialog({ type: 'alert', title: 'Gagal Penguraian', message: 'Gagal memproses file CSV: ' + err.message }); }
@@ -1335,8 +1338,8 @@ export default function App() {
         }
 
         if (count > 0) {
-          if (isDemoMode) { setEmployees(newEmps); setImportSuccess(`Berhasil mengimpor ${count} data pegawai baru (Lokal)!`); } 
-          else { try { await runWithRetry(() => batch.commit()); setImportSuccess(`Berhasil mengimpor ${count} data pegawai baru ke Cloud!`); } catch (err) { setDialog({ type: 'alert', title: 'Kesalahan', message: 'Terjadi kesalahan saat menyimpan data.' }); } }
+          if (isDemoMode) { setEmployees(newEmps); setImportSuccess(`Berhasil mengimpor ${count} data pegawai (Lokal)!`); } 
+          else { try { await runWithRetry(() => batch.commit()); setImportSuccess(`Berhasil mengimpor ${count} data pegawai ke Cloud!`); } catch (err) { setDialog({ type: 'alert', title: 'Kesalahan', message: 'Terjadi kesalahan saat menyimpan data.' }); } }
         } else setImportSuccess("Data di file sudah terdaftar semua atau format kolom salah.");
         setTimeout(() => setImportSuccess(''), 5000);
       };
@@ -1549,7 +1552,7 @@ export default function App() {
       setGenerating(true);
       const activeEmployees = employees.filter(e => e.role !== 'admin');
       if (activeEmployees.length === 0) {
-        setDialog({ type: 'alert', title: 'Pegawai Kosong', message: 'Silakan tambah atau impor pegawai terlebih dahulu.' });
+        setDialog({ type: 'alert', title: 'Pegawai Kosong', message: 'Silakan tambah atau impor pegawai terlebih dahulu sebelum membuat simulasi.' });
         setGenerating(false); return;
       }
 
