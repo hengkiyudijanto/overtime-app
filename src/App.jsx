@@ -70,8 +70,7 @@ const INITIAL_DEMO_REQUESTS = [
 const navItems = [
   { id: 'pengajuan', label: 'Pengajuan Lembur', icon: Clock, roles: ['maker', 'approval', 'manager', 'admin'] },
   { id: 'approval', label: 'Approval Lembur', icon: CheckSquare, roles: ['approval', 'manager', 'admin'] },
-  { id: 'laporan', label: 'Laporan', icon: FileText, roles: ['maker', 'approval', 'manager', 'admin'] },
-  { id: 'statistik', label: 'Statistik', icon: BarChart2, roles: ['approval', 'manager', 'admin'] },
+  { id: 'laporan_statistik', label: 'Laporan & Statistik', icon: FileText, roles: ['maker', 'approval', 'manager', 'admin'] },
   { id: 'pegawai', label: 'Data Pegawai', icon: Users, roles: ['admin'] },
   { id: 'parameter', label: 'Parameter', icon: Settings, roles: ['admin'] },
   { id: 'simulator', label: 'Simulator Data', icon: Database, roles: ['admin'] },
@@ -1148,6 +1147,32 @@ export default function App() {
     );
   };
 
+  // --- TAB VIEW WRAPPER: LAPORAN & STATISTIK ---
+  const LaporanStatistikView = () => {
+    const [activeSubTab, setActiveSubTab] = useState('laporan');
+    const canSeeStatistik = ['admin', 'manager', 'approval'].includes(currentUser?.role);
+
+    return (
+      <div className="space-y-4 animate-in fade-in duration-200 text-left">
+        <div className="flex bg-white rounded-xl p-1 shadow-xs border border-slate-200 gap-1 w-full max-w-md no-print">
+          <button type="button" onClick={() => setActiveSubTab('laporan')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeSubTab === 'laporan' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
+            Data Laporan
+          </button>
+          {canSeeStatistik && (
+            <button type="button" onClick={() => setActiveSubTab('statistik')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeSubTab === 'statistik' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
+              Statistik Kinerja
+            </button>
+          )}
+        </div>
+
+        <div>
+          {activeSubTab === 'laporan' && <LaporanView />}
+          {activeSubTab === 'statistik' && canSeeStatistik && <StatistikView />}
+        </div>
+      </div>
+    );
+  };
+
   // --- TAB VIEW: PEGAWAI ---
   const PegawaiView = () => {
     const [isEditing, setIsEditing] = useState(false);
@@ -1724,8 +1749,7 @@ export default function App() {
           {activeTab === 'approval' && <ApprovalView />}
           {activeTab === 'pegawai' && <PegawaiView />}
           {activeTab === 'parameter' && <ParameterView />}
-          {activeTab === 'laporan' && <LaporanView />}
-          {activeTab === 'statistik' && <StatistikView />}
+          {activeTab === 'laporan_statistik' && <LaporanStatistikView />}
           {activeTab === 'simulator' && <SimulatorView />}
         </div>
       </main>
